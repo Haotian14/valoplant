@@ -8,7 +8,10 @@ export type AgentMarker = Base & {
 export type AbilityMarker = Base & {
   data: { type: string; index: number }; isAlly?: boolean;
   rotation?: number; length?: number; wallPath?: Point[]; armLengthsMeters?: number[];
-  visualState?: { isActive?: boolean; isIconHidden?: boolean };
+  visualState?: {
+    showRangeOutline?: boolean; showRangeFill?: boolean; showInnerOutline?: boolean;
+    showInnerFill?: boolean; showVisionCone?: boolean; isActive?: boolean; isIconHidden?: boolean;
+  };
 };
 export type TextMarker = Base & { text: string; size?: number; fontSize?: number; sizeVersion?: number; tagColorValue?: number };
 export type ImageMarker = Base & { aspectRatio: number; scale: number; fileExtension?: string; sizeVersion?: number; assetId?: string; link?: string };
@@ -16,6 +19,7 @@ export type Utility = Base & {
   type: string; isAlly?: boolean; length: number; rotation: number; angle?: number;
   customDiameter?: number; customWidth?: number; customLength?: number;
   customColorValue?: number; customOpacityPercent?: number; isZone?: boolean; attachedAgentId?: string;
+  mapDoor?: string;
 };
 export type Drawing = {
   id: string; type?: string; color?: string; colorValue?: number; thickness?: number;
@@ -54,9 +58,24 @@ type ItemByCollection<T extends Collection> = Page[T][number];
 export const newId = () => crypto.randomUUID();
 export const currentIcaVersion = '112';
 
+const defaultPageName = (index: number) => `Page ${index + 1}`;
+const autoName = /^(?:Page (\d+)|第 (\d+) 页)$/;
+
+export function pageName(page: Page): string {
+  const match = page.isAutoNamed && page.name.match(autoName);
+  return match ? `第 ${match[1] ?? match[2]} 页` : page.name;
+}
+
+export function reindexPages(pages: Page[]): Page[] {
+  return pages.map((page, index) => ({
+    ...page, sortIndex: String(index),
+    name: page.isAutoNamed && autoName.test(page.name) ? defaultPageName(index) : page.name,
+  }));
+}
+
 export function newPage(index: number, attack: Page['isAttack'] = 'true'): Page {
   return {
-    id: newId(), name: `第 ${index + 1} 页`, sortIndex: String(index), isAutoNamed: true,
+    id: newId(), name: defaultPageName(index), sortIndex: String(index), isAutoNamed: true,
     isAttack: attack, settings: { agentSize: 35, abilitySize: 25 },
     agentData: [], abilityData: [], drawingData: [], textData: [], imageData: [], utilityData: [],
     lineUpOrigins: [], lineUpLandings: [], lineUpLinks: [],
@@ -72,6 +91,17 @@ export function newStrategy(map: string, name: string): Strategy {
 
 export function append<T extends Collection>(page: Page, collection: T, item: ItemByCollection<T>): Page {
   return { ...page, [collection]: [...page[collection], item] };
+}
+
+export function appendLineup(page: Page, link: LineupLink, origin: AgentMarker, landing: AbilityMarker): Page {
+  return {
+    ...page,
+    lineUpOrigins: page.lineUpOrigins.some(row => row.id === link.originId)
+      ? page.lineUpOrigins : [...page.lineUpOrigins, { id: link.originId, agent: origin }],
+    lineUpLandings: page.lineUpLandings.some(row => row.id === link.landingId)
+      ? page.lineUpLandings : [...page.lineUpLandings, { id: link.landingId, ability: landing }],
+    lineUpLinks: [...page.lineUpLinks, link],
+  };
 }
 
 export function patchItem<T extends Collection>(

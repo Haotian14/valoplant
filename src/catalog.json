@@ -1655,6 +1655,8 @@
             "color": 4294945600,
             "width": 43.35,
             "height": 323.68,
+            "minLength": 46.24,
+            "fullLengthByDefault": false,
             "scalable": true
           },
           "mapGeometry": {
@@ -5001,6 +5003,8 @@
             "color": 4294967295,
             "width": 3,
             "height": 86.7,
+            "minLength": 5.78,
+            "fullLengthByDefault": true,
             "scalable": true
           },
           "mapGeometry": {
@@ -6202,6 +6206,8 @@
             "color": 4282682111,
             "width": 20.23,
             "height": 260.1,
+            "minLength": 5.78,
+            "fullLengthByDefault": true,
             "scalable": true
           },
           "mapGeometry": {
@@ -9241,6 +9247,8 @@
             "color": 4278430196,
             "width": 115.60000000000001,
             "height": 231.20000000000002,
+            "minLength": 5.78,
+            "fullLengthByDefault": true,
             "scalable": true
           },
           "mapGeometry": {
@@ -9415,6 +9423,8 @@
             "color": 4284955319,
             "width": 5.78,
             "height": 69.36,
+            "minLength": 5.78,
+            "fullLengthByDefault": true,
             "scalable": true
           },
           "mapGeometry": {

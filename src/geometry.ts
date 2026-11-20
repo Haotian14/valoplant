@@ -1,7 +1,8 @@
 import {
   abilityFor, abilityGeometry, add, point, project, subtract, virtualToWorld, type MapInfo, type Point,
 } from './catalog.ts';
-import type { AbilityMarker, AgentMarker, CanvasItem, Collection, Page, Utility } from './strategy.ts';
+import type { AbilityMarker, AgentMarker, CanvasItem, Collection, ImageMarker, Page, TextMarker, Utility } from './strategy.ts';
+import { initialWallPath } from './wall-path.ts';
 
 export const agentAnchor = point(17.5 * virtualToWorld, 17.5 * virtualToWorld);
 
@@ -11,7 +12,27 @@ export function abilityAnchor(type: string, index: number, map: MapInfo): Point 
   return point(dx * virtualToWorld, dy * virtualToWorld);
 }
 
+export function abilityLengthRange(marker: AbilityMarker, map: MapInfo) {
+  const ability = abilityFor(marker.data.type, marker.data.index);
+  const geometry = ability?.geometry;
+  if (!ability || !geometry?.scalable || !geometry.height) return;
+  const min = geometry.minLength ?? 5.78;
+  const max = geometry.height;
+  const raw = marker.length || (geometry.fullLengthByDefault ? max : min);
+  const length = Math.min(max, Math.max(min, raw));
+  const mapLength = abilityGeometry(ability, map.id).height ?? max * map.scale;
+  return { length, min, max, displayScale: mapLength * virtualToWorld / max };
+}
+
 export const metersToWorld = (value: number, map: MapInfo) => value * 11.56 * map.scale * virtualToWorld;
+
+const diagonal = Math.SQRT1_2;
+export const barrierMeshAxes = [point(diagonal, -diagonal), point(-diagonal, -diagonal),
+  point(-diagonal, diagonal), point(diagonal, diagonal)];
+
+export function meshArmLength(value: number | undefined): number {
+  return value !== undefined && Number.isFinite(value) ? Math.max(1, Math.min(10, value)) : 10;
+}
 
 export function utilityAnchor(utility: Utility, map: MapInfo, version = 112): Point {
   if (utility.type === 'customCircle') {
@@ -30,9 +51,11 @@ export function makeAgent(id: string, center: Point, ally: boolean): AgentMarker
   return { id: crypto.randomUUID(), kind: 'plain', type: id, position: subtract(center, agentAnchor), isAlly: ally, isDeleted: false, state: 'none' };
 }
 
-export function makeAbility(type: string, index: number, center: Point, ally: boolean, map: MapInfo): AbilityMarker {
+export function makeAbility(type: string, index: number, center: Point, ally: boolean, map: MapInfo, attack: boolean): AbilityMarker {
+  const ability = abilityFor(type, index);
+  const wall = ability && abilityGeometry(ability, map.id).kind === 'wall';
   return { id: crypto.randomUUID(), position: subtract(center, abilityAnchor(type, index, map)), isDeleted: false,
-    data: { type, index }, isAlly: ally, rotation: 0, length: 0 };
+    data: { type, index }, isAlly: ally, rotation: 0, length: 0, ...(wall ? { wallPath: initialWallPath(map, attack) } : {}) };
 }
 
 export function makeUtility(type: string, center: Point, ally: boolean, map: MapInfo, color: number, version: number): Utility {
@@ -59,6 +82,37 @@ export const pageIsAttack = (page: Page) => page.isAttack !== 'false';
 export const canonicalMarkers = (page: Page, version: number) => pageIsAttack(page) || version < 97;
 export const worldMarker = (item: CanvasItem, collection: Collection, map: MapInfo, page: Page, version: number) =>
   'position' in item ? project(add(item.position, anchorFor(collection, item, map, version)), canonicalMarkers(page, version)) : point(0, 0);
+
+export const uprightScale = (item: ImageMarker | TextMarker) => item.sizeVersion ? 1 : 1000 / 1080;
+
+export function uprightDimensions(item: ImageMarker | TextMarker): Point {
+  const scale = uprightScale(item);
+  if ('aspectRatio' in item) {
+    const width = item.scale * scale;
+    return point(width, width / Math.max(.01, item.aspectRatio));
+  }
+  const width = Math.max(60, (item.size ?? 185) * scale);
+  const font = (item.fontSize ?? 18) * scale;
+  const lines = (item.text || '在这里输入…').split('\n')
+    .reduce((n, line) => n + Math.max(1, Math.ceil(line.length * font * .7 / width)), 0);
+  return point(width, Math.max(36, font * 1.45 * lines + 18));
+}
+
+export function uprightPosition(item: ImageMarker | TextMarker, page: Page, version: number): Point {
+  if (canonicalMarkers(page, version)) return item.position;
+  return subtract(project(item.position, false), uprightDimensions(item));
+}
+
+export function pinnedUprightPosition<T extends ImageMarker | TextMarker>(item: T, resized: T, page: Page, version: number): Point {
+  return canonicalMarkers(page, version) ? item.position
+    : project(add(uprightPosition(item, page, version), uprightDimensions(resized)), false);
+}
+
+export function withMarkerCenter<T extends CanvasItem & { position: Point }>(
+  item: T, collection: Collection, center: Point, map: MapInfo, version: number,
+): T {
+  return { ...item, position: subtract(center, anchorFor(collection, item, map, version)) };
+}
 
 export function drawingColor(hex: string) {
   return (0xff000000 + Number.parseInt(hex.slice(1), 16)) >>> 0;

@@ -1,4 +1,4 @@
-import catalog from './catalog.json';
+import catalog from './catalog.json' with { type: 'json' };
 
 export type Point = { dx: number; dy: number };
 export type MapInfo = {
@@ -7,7 +7,8 @@ export type MapInfo = {
 };
 export type AbilityGeometry = {
   anchor: number[]; bounds: number[]; kind: string;
-  width?: number; height?: number; diameter?: number; inner?: number; sweep?: number;
+  width?: number; height?: number; minLength?: number; fullLengthByDefault?: boolean;
+  diameter?: number; inner?: number; sweep?: number;
   color?: number; sprite?: string; scalable?: boolean;
 };
 export type Ability = {
@@ -30,6 +31,14 @@ export const project = (p: Point, attack: boolean) => attack ? p : point(worldWi
 export const gameAsset = (path: string) => `${import.meta.env.BASE_URL}game/${path}`;
 export const mapThumb = (id: string) => gameAsset(`maps/thumbnails/${id}_thumbnail.webp`);
 export const abilityFor = (id: string, index: number) => agentById[id]?.abilities.find(ability => ability.index === index);
+
+export function mapArtworkFrame(map: MapInfo, attack: boolean) {
+  const scale = Math.min(1240 / map.width, worldHeight / map.height);
+  const width = map.width * scale, height = map.height * scale;
+  const [offsetX, offsetY] = attack ? [0, 0] : map.defenseOffset;
+  return { width, height, scale,
+    x: (worldWidth - width) / 2 - offsetX * scale, y: (worldHeight - height) / 2 - offsetY * scale };
+}
 
 export function abilityGeometry(ability: Ability, mapId: string): AbilityGeometry {
   const overrides = ability.mapGeometry?.[mapId];
