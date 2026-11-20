@@ -1,7 +1,8 @@
 import {
   abilityFor, abilityGeometry, add, point, project, subtract, virtualToWorld, type MapInfo, type Point,
 } from './catalog.ts';
-import type { AbilityMarker, AgentMarker, CanvasItem, Collection, ImageMarker, Page, TextMarker, Utility } from './strategy.ts';
+import { append, appendLineup, type AbilityMarker, type AgentMarker, type CanvasItem, type CanvasSelection,
+  type Collection, type ImageMarker, type Page, type TextMarker, type Utility } from './strategy.ts';
 import { initialWallPath } from './wall-path.ts';
 
 export const agentAnchor = point(17.5 * virtualToWorld, 17.5 * virtualToWorld);
@@ -23,6 +24,21 @@ export function abilityLengthRange(marker: AbilityMarker, map: MapInfo) {
   const mapLength = abilityGeometry(ability, map.id).height ?? max * map.scale;
   return { length, min, max, displayScale: mapLength * virtualToWorld / max };
 }
+
+export function abilityVision(marker: AbilityMarker, map: MapInfo) {
+  const key = `${marker.data.type}:${marker.data.index}`;
+  const angle = ({ 'killjoy:2': 100, 'cypher:2': 103, 'raze:0': 40, 'gekko:1': 40 } as Record<string, number>)[key];
+  if (!angle) return;
+  const fixed = key === 'raze:0' || key === 'gekko:1';
+  const scale = fixed ? map.scale : 1;
+  const maximum = fixed ? Math.min(15 * 5.78 * map.scale, 300) : 300;
+  const minimum = Math.min(maximum, 40);
+  const stored = marker.length && marker.length > 0 ? marker.length : fixed ? maximum / scale : 50;
+  return { angle, length: Math.min(maximum, Math.max(minimum, stored * scale)) / scale,
+    min: minimum / scale, max: maximum / scale, displayScale: virtualToWorld * scale };
+}
+
+export const usesInactiveTrace = (marker: AbilityMarker) => marker.data.type === 'viper' && [1, 2].includes(marker.data.index);
 
 export const metersToWorld = (value: number, map: MapInfo) => value * 11.56 * map.scale * virtualToWorld;
 
@@ -59,14 +75,22 @@ export function makeAbility(type: string, index: number, center: Point, ally: bo
 }
 
 export function makeUtility(type: string, center: Point, ally: boolean, map: MapInfo, color: number, version: number): Utility {
+  const fullCircle = type === 'viewCone360';
+  const zone = type === 'customZone';
+  if (fullCircle) type = 'viewCone180';
+  if (zone) type = 'customRectangle';
   const utility: Utility = { id: crypto.randomUUID(), position: center, type, isAlly: ally, isDeleted: false, length: 100, rotation: 0 };
+  if (zone) utility.isZone = true;
   if (type === 'customCircle') utility.customDiameter = 10;
   if (type === 'customRectangle') { utility.customWidth = 7; utility.customLength = 11; }
   if (type === 'customCircle' || type === 'customRectangle') {
     utility.customColorValue = color;
     utility.customOpacityPercent = 22;
   }
-  if (type.startsWith('viewCone')) utility.angle = Number(type.slice('viewCone'.length));
+  if (type.startsWith('viewCone')) {
+    utility.angle = fullCircle ? 360 : ({ viewCone40: 20, viewCone90: 60, viewCone180: 103 }[type] ?? 90);
+    if (fullCircle) utility.length = 150;
+  }
   utility.position = subtract(center, utilityAnchor(utility, map, version));
   return utility;
 }
@@ -149,4 +173,18 @@ export function flipPage(page: Page, side: Page['isAttack'], map: MapInfo, versi
     lineUpOrigins: page.lineUpOrigins.map(row => ({ ...row, agent: flip(row.agent, 'agentData') })),
     lineUpLandings: page.lineUpLandings.map(row => ({ ...row, ability: flip(row.ability, 'abilityData') })),
   };
+}
+
+export function copyToPage(source: Page, target: Page, selection: CanvasSelection | string, map: MapInfo, version: number): Page {
+  const projected = flipPage(source, target.isAttack, map, version);
+  if (typeof selection === 'string') {
+    const link = projected.lineUpLinks.find(row => row.id === selection);
+    if (!link || target.lineUpLinks.some(row => row.id === link.id)) return target;
+    const origin = projected.lineUpOrigins.find(row => row.id === link.originId)?.agent;
+    const landing = projected.lineUpLandings.find(row => row.id === link.landingId)?.ability;
+    return origin && landing ? appendLineup(target, link, origin, landing) : target;
+  }
+  const { collection, id } = selection;
+  const object = projected[collection].find(item => item.id === id);
+  return object && !target[collection].some(item => item.id === id) ? append(target, collection, object) : target;
 }

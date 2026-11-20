@@ -24,6 +24,10 @@ npm run dev
 5. 把收到的文件放进 [`strategies/`](strategies/) 并提交到 `main`。支持子目录和中文文件名。更新同一份战术时替换同一路径的文件。
 6. GitHub Actions 重新部署后刷新 **团队战术库**。打开团队战术会创建本地副本，已编辑的副本在「本地战术」中保留。
 
+团队战术卡片的眼睛按钮可进入只读浏览。本地战术库支持多级文件夹、置顶和 ZIP 备份，可直接拖入 .ica 或备份 ZIP。编辑器可导出 PNG、视频和透明 MOV，普通视频格式取决于浏览器支持的编码器。
+
+「回放」可以打开已解码的 Icarus `.icrp` 文件，按回合播放，并把当前画面保存成战术页。回放文件和草稿都保存在当前浏览器。
+
 上一个 Flutter 版本里的本地草稿可以先导出为 .ica，再在新版网页导入。
 
 首次部署时，在公开仓库的 **Settings → Pages** 中把发布来源设为 **GitHub Actions**，然后在 **Actions → Deploy team playbook** 运行工作流。之后提交到 `main` 会自动更新网站。当前公开仓库里的战术文件会随网站公开。
@@ -32,4 +36,4 @@ npm run dev
 
 本项目自有的代码和文档采用 [MIT](LICENSE) 许可证。地图资源、特工图标、技能参数和文件结构参考 [Icarus Strats](https://github.com/SunkenInTime/icarus/tree/685586df4a0805adf6b403cd7fe4ce771d617d5e)。复用的 Icarus 内容保留 [Apache-2.0](LICENSES/Apache-2.0.txt) 许可证及 [上游署名](NOTICE)。VALORANT 及相关游戏资源归 Riot Games 所有。
 
-逐项对照结果见 [Icarus 交互核对](docs/icarus-interaction-audit.md)。
+原版功能、本站对应入口及差距见 [Icarus Strats 功能对照总表](docs/icarus-interaction-audit.md)。

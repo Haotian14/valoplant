@@ -1,8 +1,8 @@
 import type { Point } from './catalog.ts';
 
-type Base = { id: string; position: Point; isDeleted?: boolean; caption?: string };
+type Base = { id: string; position: Point; isDeleted?: boolean; caption?: string; visionElevation?: number };
 export type AgentMarker = Base & {
-  kind?: string; type: string; isAlly?: boolean; state?: string;
+  kind?: string; type: string; isAlly?: boolean; state?: string; weapon?: string;
   rotation?: number; length?: number; presetType?: string; diameterMeters?: number; colorValue?: number; opacityPercent?: number;
 };
 export type AbilityMarker = Base & {
@@ -46,6 +46,7 @@ export type Page = {
 export type Document = { versionNumber: string; mapData: string; pages: Page[]; [key: string]: unknown };
 export type Strategy = {
   id: string; name: string; updated: number; document: Document; media: Record<string, Uint8Array>;
+  createdAt?: number; folderId?: string; pinned?: boolean;
   published?: { path: string; revision: string; importedAt: number };
 };
 
@@ -83,8 +84,9 @@ export function newPage(index: number, attack: Page['isAttack'] = 'true'): Page 
 }
 
 export function newStrategy(map: string, name: string): Strategy {
+  const now = Date.now();
   return {
-    id: newId(), name, updated: Date.now(), media: {},
+    id: newId(), name, updated: now, createdAt: now, media: {},
     document: { versionNumber: currentIcaVersion, mapData: map, pages: [newPage(0)] },
   };
 }

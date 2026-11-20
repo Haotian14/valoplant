@@ -123,11 +123,14 @@ export function writeIca(strategy: Strategy): Uint8Array {
 }
 
 export function downloadIca(strategy: Strategy) {
-  const bytes = writeIca(strategy);
-  const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/zip' }));
+  saveDownload(writeIca(strategy), `${strategy.name.replace(/[<>:"/\\|?*]/g, '_').trim() || '战术'}.ica`, 'application/zip');
+}
+
+export function saveDownload(bytes: Uint8Array, filename: string, type: string) {
+  const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${strategy.name.replace(/[<>:"/\\|?*]/g, '_').trim() || '战术'}.ica`;
+  link.download = filename;
   document.body.append(link);
   link.click();
   link.remove();

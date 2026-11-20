@@ -30,6 +30,11 @@ const doorsByMap: Record<string, MapDoor[]> = {
 
 const noDoors: readonly MapDoor[] = [];
 export const mapDoors = (map: MapInfo): readonly MapDoor[] => doorsByMap[map.id] ?? noDoors;
+export const replayDoorActors: Record<string, string> = {
+  'ascent-a': 'WindowShieldA1', 'ascent-b': 'WindowShieldB1',
+  'lotus-a': 'Drawbridge6', 'lotus-c': 'Drawbridge5', 'lotus-a-link': 'RespawningWallPlate',
+  'summit-a': 'DescentBox_v12', 'summit-mid': 'DescentBox_v9', 'summit-b': 'DescentBox_v5',
+};
 export const findMapDoor = (item: CanvasItem, map: MapInfo) =>
   'mapDoor' in item ? mapDoors(map).find(door => door.id === item.mapDoor) : undefined;
 export const changedMapDoors = (page: Page, map: MapInfo) => {
@@ -37,11 +42,11 @@ export const changedMapDoors = (page: Page, map: MapInfo) => {
   return mapDoors(map).filter(door => stored.has(door.id)).map(door => door.id);
 };
 
-export function doorLine(door: MapDoor, map: MapInfo, attack: boolean, changed: boolean): [Point, Point] {
+export function doorLine(door: MapDoor, map: MapInfo, attack: boolean, changed: boolean, rotation = changed ? Math.PI / 2 : 0): [Point, Point] {
   const { x, y, scale } = mapArtworkFrame(map, true);
   const center = midpoint(door.start, door.end);
   const draw = (p: Point) => {
-    const svg = changed && door.kind === 'spin' ? add(center, rotatedVector(subtract(p, center), Math.PI / 2)) : p;
+    const svg = door.kind === 'spin' && rotation ? add(center, rotatedVector(subtract(p, center), rotation)) : p;
     return project(point(x + svg.dx * scale, y + svg.dy * scale), attack);
   };
   return [draw(door.start), draw(door.end)];

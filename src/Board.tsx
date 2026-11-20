@@ -1,14 +1,18 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type Ref } from 'react';
+import { t } from './locale.ts';
+import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type Ref } from 'react';
 import { Crosshair, Minus, Plus } from 'lucide-react';
 import { distance, fitZoom, midpoint, pinchCamera, zoomAt } from './board-gestures.ts';
 import { objectForPlacement, type Placement, type PlacementPreview } from './placement.ts';
-import { CanvasObject, DrawingArt, LineupArt, MapArtwork, MapDoorBars, VisionWalls, type MapLayers } from './BoardArt.tsx';
-import { mapById, point, project, subtract, worldHeight, worldWidth, type MapInfo, type Point } from './catalog.ts';
+import { CanvasObject, DrawingArt, LineupArt, MapArtwork, MapDoorBars, VisionHeight, VisionOpacity, VisionWalls, type MapLayers } from './BoardArt.tsx';
+import { add, mapById, point, project, subtract, worldHeight, worldWidth, type MapInfo, type Point } from './catalog.ts';
 import { canonicalMarkers, drawingColor, pageIsAttack, worldMarker } from './geometry.ts';
 import { objectHandles, transformObject, type ObjectFrame, type ObjectHandle } from './object-handles.ts';
 import { savedWallPath } from './wall-path.ts';
 import { changedMapDoors, findMapDoor, mapDoors, type MapDoor } from './map-doors.ts';
-import { loadSightWalls, sightDoorWalls, type SightSegment } from './map-vision.ts';
+import { loadSightWalls, nearestSightWall, sightDoorWalls, type SightSegment } from './map-vision.ts';
+import { loadHeightModel, type HeightModel } from './height-vision.ts';
+import { themedMap, type MapPalette } from './preferences.ts';
+import { loadNavigation, routeAcrossMap, type Navigation } from './navigation.ts';
 import {
   bounds, drawingCollections, moveItem, newId, positionOf,
   type AbilityMarker, type AgentMarker, type CanvasItem, type CanvasSelection, type Drawing, type LineupLink, type Page,
@@ -46,7 +50,7 @@ function hitSelection(target: EventTarget | null): CanvasSelection | undefined {
 type Gesture =
   | { kind: 'pan'; pointerId: number; base: typeof initialCamera; screen: Point; unitsPerPixel: number }
   | { kind: 'draw'; pointerId: number; tool: DrawingTool; points: Point[] }
-  | { kind: 'move'; pointerId: number; start: Point; items: CanvasSelection[] }
+  | { kind: 'move'; pointerId: number; start: Point; anchor: Point; items: CanvasSelection[]; copy: boolean }
   | { kind: 'marquee'; pointerId: number; start: Point; prior: CanvasSelection[] }
   | { kind: 'erase'; pointerId: number; items: CanvasSelection[] }
   | { kind: 'transform'; pointerId: number; target: CanvasSelection; frame: ObjectFrame; handle: ObjectHandle; start: Point }
@@ -62,18 +66,21 @@ type Props = {
   map: MapInfo; page: Page; version: number; tool: Tool; brush: Brush; placement: Placement | null;
   viewport: Ref<BoardViewport>; externalDrag?: PlacementPreview;
   animate: boolean; layers: MapLayers; selection: CanvasSelection[]; media: Record<string, string>;
+  theme?: MapPalette; coneOpacity?: number; readOnly?: boolean;
+  transitionFrom?: Page;
   lineupOrigin?: AgentMarker; lineupLanding?: AbilityMarker; editingLineupId?: string;
   pinnedLineupEnd?: 'origin' | 'landing';
   editingTextId?: string;
   onSelect: (items: CanvasSelection[]) => void;
   onContext: (item: CanvasSelection, screen: Point) => void;
   onEdit: (item: CanvasSelection) => void;
+  onReadCaption: (caption: string) => void;
   onTextChange: (id: string, text: string | undefined) => void;
   onDismissAbilities: () => void;
   onHover: (item: CanvasSelection | undefined, position: Point) => void;
   hideAgents: boolean;
   onDraw: (drawing: Drawing) => void;
-  onMove: (items: CanvasSelection[], delta: Point) => void;
+  onMove: (items: CanvasSelection[], delta: Point, copy: boolean) => void;
   onTransform: (target: CanvasSelection, patch: Partial<CanvasItem>) => void;
   onDoorToggle: (door: MapDoor) => void;
   onErase: (items: CanvasSelection[]) => void;
@@ -81,6 +88,7 @@ type Props = {
   onImageDrop: (file: File, position: Point) => void;
   onLineupMove: (end: 'origin' | 'landing', delta: Point) => void;
   onLineupOpen: (link: LineupLink) => void;
+  onLineupEndpoint: (link: LineupLink, end: 'origin' | 'landing') => void;
 };
 
 export default function Board(props: Props) {
@@ -93,7 +101,7 @@ export default function Board(props: Props) {
   const [aspect, setAspect] = useState(1.4);
   const [camera, setCamera] = useState(initialCamera);
   const [drawingPreview, setDrawingPreview] = useState<Drawing>();
-  const [movePreview, setMovePreview] = useState<{ ids: Set<string>; delta: Point }>();
+  const [movePreview, setMovePreview] = useState<{ ids: Set<string>; delta: Point; copy: boolean }>();
   const [transformPreview, setTransformPreview] = useState<{ target: CanvasSelection; patch: Partial<CanvasItem> }>();
   const [screenHeight, setScreenHeight] = useState(700);
   const [marquee, setMarquee] = useState<{ start: Point; end: Point }>();
@@ -101,6 +109,9 @@ export default function Board(props: Props) {
   const [eraserCursor, setEraserCursor] = useState<Point>();
   const [erased, setErased] = useState<Set<string>>(new Set());
   const [mapWalls, setMapWalls] = useState<{ map: MapInfo; attack: boolean; walls: SightSegment[] }>();
+  const [heightData, setHeightData] = useState<{ map: MapInfo; attack: boolean; model: HeightModel }>();
+  const [mapImage, setMapImage] = useState<string>();
+  const [navigation, setNavigation] = useState<Navigation>();
 
   const artworkWidth = Math.min(1240, worldHeight * map.width / map.height);
   const height = Math.max(1120, (artworkWidth + 120) / aspect) / camera.zoom;
@@ -110,11 +121,29 @@ export default function Board(props: Props) {
   const attack = pageIsAttack(page);
   const doorKey = changedMapDoors(page, map).join(',');
   const changedDoors = useMemo(() => new Set(doorKey ? doorKey.split(',') : []), [doorKey]);
+  const doorWalls = useMemo(() => sightDoorWalls(map, attack, changedDoors), [map, attack, changedDoors]);
   const walls = useMemo(() => [
     ...(mapWalls?.map === map && mapWalls.attack === attack ? mapWalls.walls : []),
-    ...sightDoorWalls(map, attack, changedDoors),
-  ], [mapWalls, map, attack, changedDoors]);
+    ...doorWalls,
+  ], [mapWalls, map, attack, doorWalls]);
+  const heightVision = useMemo(() => heightData?.map === map && heightData.attack === attack
+    ? { model: heightData.model, doors: doorWalls } : null, [heightData, map, attack, doorWalls]);
   const canToggleDoor = tool === 'select' && !props.animate && !props.externalDrag && !props.editingTextId;
+  const agentRoutes = useMemo(() => {
+    const routes = new Map<string, Point[]>();
+    const prior = props.transitionFrom;
+    if (!navigation || !prior || pageIsAttack(prior) !== attack) return routes;
+    for (const next of page.agentData) {
+      const before = prior.agentData.find(item => item.id === next.id);
+      if (!before || before.isDeleted || next.isDeleted) continue;
+      const start = worldMarker(before, 'agentData', map, prior, version);
+      const end = worldMarker(next, 'agentData', map, page, version);
+      if (distance(start, end) < 3) continue;
+      const route = routeAcrossMap(navigation, start, end, attack, doorWalls);
+      if (route) routes.set(next.id, route);
+    }
+    return routes;
+  }, [navigation, props.transitionFrom, page.agentData, attack, map, doorWalls, version]);
   const single = tool === 'select' && props.selection.length === 1 && !props.editingTextId && props.selection[0];
   const handleItem = single && page[single.collection].find(item => item.id === single.id);
   const frame = single && handleItem && (!props.hideAgents || single.collection !== 'agentData')
@@ -170,8 +199,25 @@ export default function Board(props: Props) {
     loadSightWalls(map, attack).then(segments => {
       if (current) setMapWalls({ map, attack, walls: segments });
     }).catch(() => { if (current) setMapWalls(undefined); });
+    loadHeightModel(map, attack).then(model => {
+      if (current) setHeightData({ map, attack, model });
+    }).catch(() => { if (current) setHeightData(undefined); });
     return () => { current = false; };
   }, [map, attack]);
+  useEffect(() => {
+    let live = true;
+    setNavigation(undefined);
+    void loadNavigation(map).then(data => { if (live) setNavigation(data); }).catch(() => {});
+    return () => { live = false; };
+  }, [map]);
+
+  useEffect(() => {
+    let live = true;
+    setMapImage(undefined);
+    if (props.theme) void themedMap(`maps/${map.id}_map${attack ? '' : '_defense'}.svg`, props.theme)
+      .then(url => { if (live) setMapImage(url); }).catch(() => {});
+    return () => { live = false; };
+  }, [map.id, attack, props.theme?.base, props.theme?.detail, props.theme?.highlight]);
 
   useEffect(() => {
     const svg = root.current;
@@ -233,7 +279,7 @@ export default function Board(props: Props) {
   }, [camera.x, camera.y, camera.zoom, height]);
 
   function onDown(event: PointerEvent<SVGSVGElement>) {
-    if (event.target instanceof Element && event.target.closest('textarea')) return;
+    if (event.target instanceof Element && event.target.closest('textarea, a, .canvas-caption')) return;
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 1) event.preventDefault();
     event.currentTarget.focus({ preventScroll: true });
@@ -283,13 +329,15 @@ export default function Board(props: Props) {
       gesture.current = { kind: 'door', pointerId, door, start: p };
     } else if (clicked) {
       const selected = props.selection.some(item => keyOf(item) === keyOf(clicked));
-      const additive = event.shiftKey || event.metaKey || event.ctrlKey;
+      const additive = event.shiftKey;
       const items = additive && selected
         ? props.selection.filter(item => keyOf(item) !== keyOf(clicked))
         : additive ? [...props.selection, clicked] : selected ? props.selection : [clicked];
       props.onSelect(items);
       if (!items.some(item => keyOf(item) === keyOf(clicked))) return;
-      gesture.current = { kind: 'move', pointerId, start: p, items };
+      const item = page[clicked.collection].find(row => row.id === clicked.id);
+      const anchor = item && clicked.collection !== 'drawingData' ? worldMarker(item, clicked.collection, map, page, version) : p;
+      gesture.current = { kind: 'move', pointerId, start: p, anchor, items, copy: event.ctrlKey || event.metaKey };
     } else {
       const prior = event.shiftKey ? props.selection : [];
       props.onDismissAbilities();
@@ -330,7 +378,7 @@ export default function Board(props: Props) {
       }
       if (active.points.length > 1) setDrawingPreview(drawingFrom(active.tool, active.points, brush));
     } else if (active.kind === 'move') {
-      setMovePreview({ ids: new Set(active.items.map(keyOf)), delta: subtract(p, active.start) });
+      setMovePreview({ ids: new Set(active.items.map(keyOf)), delta: moveOffset(active, p, event.altKey), copy: active.copy });
     } else if (active.kind === 'marquee') {
       setMarquee({ start: active.start, end: p });
     } else if (active.kind === 'lineup') {
@@ -344,6 +392,11 @@ export default function Board(props: Props) {
       }
       setErased(new Set(active.items.map(keyOf)));
     }
+  }
+
+  function moveOffset(active: Extract<Gesture, { kind: 'move' }>, cursor: Point, snap: boolean) {
+    const delta = subtract(cursor, active.start);
+    return snap ? subtract(nearestSightWall(walls, add(active.anchor, delta), unitsPerPixel * 24), active.anchor) : delta;
   }
 
   function finish(event: PointerEvent<SVGSVGElement>, save: boolean) {
@@ -366,7 +419,7 @@ export default function Board(props: Props) {
       }
     }
     if (save && active.kind === 'move' && distance(cursor, active.start) > 2) {
-      props.onMove(active.items, subtract(cursor, active.start));
+      props.onMove(active.items, moveOffset(active, cursor, event.altKey), active.copy);
     }
     if (save && active.kind === 'lineup' && distance(cursor, active.start) > 2) {
       props.onLineupMove(active.end, subtract(cursor, active.start));
@@ -417,6 +470,9 @@ export default function Board(props: Props) {
   }
 
   const selectedKeys = new Set(props.selection.map(keyOf));
+  const previous = props.transitionFrom && pageIsAttack(props.transitionFrom) === attack ? props.transitionFrom : undefined;
+  const priorDrawings = previous ? new Set(previous.drawingData.map(drawing => drawing.id)) : undefined;
+  const currentDrawings = previous ? new Set(page.drawingData.map(drawing => drawing.id)) : undefined;
   const ghostPoint = props.externalDrag ? pointAt(props.externalDrag.screen) : undefined;
   const ghost = props.externalDrag && ghostPoint
     ? objectForPlacement(props.externalDrag.marker, ghostPoint, map, page, version, drawingColor(brush.color))
@@ -432,29 +488,33 @@ export default function Board(props: Props) {
     return [{ end, collection, marker, center: worldMarker(marker, collection, map, page, version) }];
   });
   const markerOrder = ['imageData', 'utilityData', 'abilityData', 'agentData', 'drawingData', 'textData'] as const;
-  return <VisionWalls.Provider value={walls}><div className="board-wrap">
+  return <VisionWalls.Provider value={walls}><VisionHeight.Provider value={heightVision}><VisionOpacity.Provider value={props.coneOpacity ?? .15}><div className="board-wrap">
     <svg ref={root} className={`board board-${tool}`} viewBox={`${left} ${top} ${width} ${height}`}
       role="group" tabIndex={-1} aria-label={`${mapById[map.id]?.name} 战术画布`}
       onPointerDown={onDown} onPointerMove={onMove} onPointerUp={event => finish(event, true)}
       onPointerCancel={event => finish(event, false)} onLostPointerCapture={event => finish(event, false)}
-      onContextMenu={openContext}
+      onContextMenu={props.readOnly ? undefined : openContext}
       onPointerLeave={() => { props.onHover(undefined, point(0, 0)); setEraserCursor(undefined); }}
       onDoubleClick={event => {
         if (tool !== 'select') return;
         const item = hitSelection(document.elementFromPoint(event.clientX, event.clientY));
         if (item) props.onEdit(item);
       }}
-      onDragOver={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
-      onDrop={drop}>
+      onDragOver={event => { if (!props.readOnly && event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } }}
+      onDrop={props.readOnly ? undefined : drop}>
       <defs>
         <pattern id="board-dots" width="18" height="18" patternUnits="userSpaceOnUse">
           <circle cx="6" cy="6" r="1.4" fill="#3c364a" />
         </pattern>
       </defs>
       {props.layers.grid && <rect {...{ x: left, y: top, width, height }} fill="url(#board-dots)" />}
-      <MapArtwork map={map} attack={attack} layers={props.layers} />
+      <MapArtwork map={map} attack={attack} layers={props.layers} mapImage={mapImage} />
       <MapDoorBars map={map} attack={attack} changed={changedDoors} active={canToggleDoor} toggle={props.onDoorToggle} />
       {markerOrder.filter(collection => !props.hideAgents || collection !== 'agentData').map(collection => <g key={collection} opacity={tool === 'lineup' ? .36 : 1}>
+        {collection === 'drawingData' && previous?.drawingData.filter(drawing => !currentDrawings?.has(drawing.id)).map(drawing =>
+          <g className="drawing-leaving" pointerEvents="none" key={page.id + drawing.id}>
+            <DrawingArt drawing={drawing} attack={attack} mapScale={map.scale} />
+          </g>)}
         {page[collection].map(item => {
           const key = keyOf({ collection, id: item.id });
           if (erased.has(key) || findMapDoor(item, map)) return null;
@@ -463,14 +523,23 @@ export default function Board(props: Props) {
           const delta = movePreview?.delta;
           const displayed = moved && delta ? moveItem(item, attackCoordinates ? delta : point(-delta.dx, -delta.dy)) : item;
           const transform = transformPreview && keyOf(transformPreview.target) === key ? transformPreview.patch : undefined;
-          return <CanvasObject key={item.id} item={transform ? { ...displayed, ...transform } : displayed} collection={collection} map={map} page={page}
+          return <Fragment key={item.id}>
+          {moved && movePreview?.copy && <CanvasObject item={item} collection={collection} map={map} page={page}
+            version={version} selected={false} animate={false} media={props.media} />}
+          <g className={collection === 'drawingData' && priorDrawings && !priorDrawings.has(item.id) ? 'drawing-entering' : undefined}>
+          <CanvasObject item={transform ? { ...displayed, ...transform } : displayed} collection={collection} map={map} page={page}
             version={version} selected={selectedKeys.has(key)} animate={props.animate && !moved && !transform} media={props.media}
+            route={collection === 'agentData' && !moved && !transform ? agentRoutes.get(item.id) : undefined}
+            showCaption={props.layers.captions} openCaption={tool === 'select' || props.readOnly ? props.onReadCaption : undefined}
             editText={collection === 'textData' && props.editingTextId === item.id
-              ? text => props.onTextChange(item.id, text) : undefined} />;
+              ? text => props.onTextChange(item.id, text) : undefined} />
+          </g>
+          </Fragment>;
         })}
       </g>)}
-      <LineupArt page={page} map={map} version={version} active={tool === 'lineup' && !props.editingLineupId}
-        hiddenId={props.editingLineupId} onOpen={props.onLineupOpen} />
+      <LineupArt page={page} map={map} version={version} active={props.readOnly || tool === 'lineup' && !props.editingLineupId}
+        hiddenId={props.editingLineupId} onOpen={props.onLineupOpen}
+        onEndpoint={tool === 'select' || tool === 'lineup' && !props.editingLineupId ? props.onLineupEndpoint : undefined} />
       {drawingPreview && <g pointerEvents="none"><DrawingArt drawing={drawingPreview} attack={attack} mapScale={map.scale} /></g>}
       {marquee && <rect x={Math.min(marquee.start.dx, marquee.end.dx)} y={Math.min(marquee.start.dy, marquee.end.dy)}
         width={Math.abs(marquee.start.dx - marquee.end.dx)} height={Math.abs(marquee.start.dy - marquee.end.dy)}
@@ -499,11 +568,11 @@ export default function Board(props: Props) {
         strokeWidth="1.5" fill="#eeeaf833" pointerEvents="none" />}
 
     </svg>
-    <div className="zoom-controls" aria-label="地图缩放">
-      <button className="icon-button" type="button" onClick={() => setCamera(c => ({ ...c, zoom: fitZoom(c.zoom / 1.2) }))} title="缩小"><Minus size={15} /></button>
-      <button className="zoom-value" type="button" onClick={() => setCamera(initialCamera)} title="重置视图">{Math.round(camera.zoom * 100)}%</button>
-      <button className="icon-button" type="button" onClick={() => setCamera(c => ({ ...c, zoom: fitZoom(c.zoom * 1.2) }))} title="放大"><Plus size={15} /></button>
-      <button className="icon-button zoom-reset" type="button" onClick={() => setCamera(initialCamera)} title="适合窗口"><Crosshair size={15} /></button>
+    <div className="zoom-controls" aria-label={t('地图缩放')}>
+      <button className="icon-button" type="button" onClick={() => setCamera(c => ({ ...c, zoom: fitZoom(c.zoom / 1.2) }))} title={t('缩小')}><Minus size={15} /></button>
+      <button className="zoom-value" type="button" onClick={() => setCamera(initialCamera)} title={t('重置视图')}>{Math.round(camera.zoom * 100)}%</button>
+      <button className="icon-button" type="button" onClick={() => setCamera(c => ({ ...c, zoom: fitZoom(c.zoom * 1.2) }))} title={t('放大')}><Plus size={15} /></button>
+      <button className="icon-button zoom-reset" type="button" onClick={() => setCamera(initialCamera)} title={t('适合窗口')}><Crosshair size={15} /></button>
     </div>
-  </div></VisionWalls.Provider>;
+  </div></VisionOpacity.Provider></VisionHeight.Provider></VisionWalls.Provider>;
 }

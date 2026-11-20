@@ -44,6 +44,21 @@ export function sightDoorWalls(map: MapInfo, attack: boolean, changedDoors: Read
   return out;
 }
 
+export function nearestSightWall(walls: readonly SightSegment[], target: Point, reach: number): Point {
+  let best = target;
+  let shortest = reach * reach;
+  for (const [x1, y1, x2, y2] of walls) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const length = dx * dx + dy * dy;
+    if (!length) continue;
+    const t = Math.min(1, Math.max(0, ((target.dx - x1) * dx + (target.dy - y1) * dy) / length));
+    const x = x1 + dx * t, y = y1 + dy * t;
+    const distance = (x - target.dx) ** 2 + (y - target.dy) ** 2;
+    if (distance < shortest) { shortest = distance; best = { dx: x, dy: y }; }
+  }
+  return best;
+}
+
 /** Returns a polygon relative to the origin. Bounds and tangent rays keep it
  * within the cone, while map edges stop each ray at its first intersection. */
 export function sightPolygon(

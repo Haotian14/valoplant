@@ -1,4 +1,5 @@
-import { mkdir, writeFile, copyFile, cp } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile, cp, readFile, readdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, resolve, join } from 'node:path';
 import { buildStrategyIndex } from './strategy-index.mjs';
 
@@ -15,4 +16,15 @@ await Promise.all([
   copyFile('NOTICE', join('dist', 'NOTICE')),
   cp('LICENSES', join('dist', 'LICENSES'), { recursive: true }),
 ]);
+async function walk(path) {
+  const entries = await readdir(join('dist', path), { withFileTypes: true });
+  const children = await Promise.all(entries.map(entry => entry.isDirectory()
+    ? walk(`${path}/${entry.name}`) : `${path}/${entry.name}`));
+  return children.flat();
+}
+const files = ['index.html', ...(await walk('assets')), ...(await walk('game'))].sort();
+const fingerprint = createHash('sha256');
+for (const file of files) fingerprint.update(file).update(await readFile(join('dist', file)));
+const worker = await readFile(new URL('./offline-worker.js', import.meta.url), 'utf8');
+await writeFile(join('dist', 'sw.js'), `const version = '${fingerprint.digest('hex')}';\nconst files = ${JSON.stringify(files)};\n${worker}`);
 console.log(`已发布 ${records.length} 条团队战术`);

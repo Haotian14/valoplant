@@ -1,7 +1,7 @@
 import { draggedAngle, draggedEdge, rotatedVector } from './board-gestures.ts';
 import { abilityFor, abilityGeometry, add, point, project, subtract, virtualToWorld, type MapInfo, type Point } from './catalog.ts';
 import {
-  abilityLengthRange, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, pinnedUprightPosition, uprightDimensions, uprightPosition, uprightScale,
+  abilityLengthRange, abilityVision, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, pinnedUprightPosition, uprightDimensions, uprightPosition, uprightScale,
   withMarkerCenter, worldMarker,
 } from './geometry.ts';
 import type { CanvasItem, Collection, Page, Utility } from './strategy.ts';
@@ -21,6 +21,7 @@ export function markerAbility(item: CanvasItem, map: MapInfo) {
 }
 
 export function canRotate(item: CanvasItem, map: MapInfo) {
+  if ('data' in item && abilityVision(item, map)) return item.visualState?.showVisionCone !== false;
   const ability = markerAbility(item, map);
   return ability ? ['sector', 'rect', 'mesh'].includes(ability.kind)
     : 'kind' in item && item.kind === 'viewCone' || 'rotation' in item && 'type' in item &&
@@ -28,7 +29,7 @@ export function canRotate(item: CanvasItem, map: MapInfo) {
 }
 
 function directionLength(item: CanvasItem, map: MapInfo) {
-  if ('data' in item) return abilityLengthRange(item, map);
+  if ('data' in item) return abilityLengthRange(item, map) ?? (item.visualState?.showVisionCone !== false ? abilityVision(item, map) : undefined);
   if ('kind' in item && item.kind === 'viewCone') {
     return { length: item.length ?? 85, min: 10, max: 600, displayScale: virtualToWorld };
   }
