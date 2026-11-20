@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { strToU8, unzipSync } from 'fflate';
+import { importIca, readIca, writeIca } from '../src/archive.ts';
+import { append, moveItem, newPage, newStrategy, removeItems } from '../src/strategy.ts';
+import { buildStrategyIndex } from '../scripts/strategy-index.mjs';
+
+const position = { dx: 900, dy: 500 };
+
+test('opens a native .ica archive and round-trips its pages, metadata, and media', () => {
+  const draft = newStrategy('ascent', '进攻 A');
+  const [page] = draft.document.pages;
+  draft.document.pages = [
+    { ...page, name: '开局「A」', agentData: [{ id: 'jett', type: 'jett', isAlly: true, position }],
+      imageData: [{ id: 'reference', position, aspectRatio: 1, scale: 160, sizeVersion: 1, fileExtension: '.png' }] },
+    { ...newPage(1, 'false'), name: '第二阶段' },
+  ];
+  draft.document.themePalette = { highlightColorValue: 0xff000000 };
+  const reference = new Uint8Array([1, 2, 3, 4]);
+  draft.media['reference.png'] = reference;
+  const bytes = writeIca(draft);
+  assert.deepEqual(Object.keys(unzipSync(bytes)).sort(), ['reference.png', 'strategy.json']);
+  const copy = importIca(bytes, '队友的战术.ica');
+  assert.equal(copy.name, '队友的战术');
+  assert.notEqual(copy.id, draft.id);
+  assert.deepEqual(copy.document, draft.document);
+  assert.deepEqual(copy.media['reference.png'], reference);
+});
+
+test('reads native legacy Lineup records and keeps their media references', () => {
+  const document = {
+    mapData: 'lotus',
+    versionNumber: '35',
+    pages: [{ ...newPage(0), isAttack: 'true', lineUpOrigins: undefined, lineUpLandings: undefined,
+      lineUpLinks: undefined, lineUpData: [{ id: 'setup', notes: 'Look at the roof', agent: {
+        id: 'agent', type: 'omen', position,
+      }, ability: { id: 'smoke', data: { type: 'omen', index: 2 }, position },
+      images: [{ id: 'ref', fileExtension: '.png' }] }] }],
+  };
+  const [page] = readIca(strToU8(JSON.stringify(document))).document.pages;
+  assert.equal(page.lineUpOrigins[0].agent.type, 'omen');
+  assert.equal(page.lineUpLandings[0].ability.data.index, 2);
+  assert.equal(page.lineUpLinks[0].notes, 'Look at the roof');
+  assert.equal(page.lineUpLinks[0].images[0].id, 'ref');
+});
+
+test('moving and deleting a selection only mutates the current page version', () => {
+  const original = newPage(0);
+  const agent = { id: 'omen', type: 'omen', position };
+  const page = append(original, 'agentData', agent);
+  const moved = moveItem(page.agentData[0], { dx: 30, dy: -15 });
+  assert.deepEqual(moved, { ...agent, position: { dx: 930, dy: 485 } });
+  assert.deepEqual(page.agentData[0].position, position);
+  assert.equal(original.agentData.length, 0);
+  assert.equal(removeItems(page, [{ collection: 'agentData', id: agent.id }]).agentData.length, 0);
+});
+
+test('indexes nested names and updates revisions from the actual strategy file', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'team-playbook-index-'));
+  try {
+    const directory = join(root, '进攻 #1');
+    const file = join(directory, 'A 夹击.ica');
+    await mkdir(directory);
+    const draft = newStrategy('ascent', 'A 夹击');
+    await writeFile(file, writeIca(draft));
+    const [first] = await buildStrategyIndex(root);
+    assert.deepEqual(first.path, ['进攻 #1', 'A 夹击.ica']);
+    assert.equal(first.map, 'ascent');
+    draft.document.pages.push(newPage(1));
+    await writeFile(file, writeIca(draft));
+    const [second] = await buildStrategyIndex(root);
+    assert.notEqual(second.revision, first.revision);
+    await rm(file);
+    assert.deepEqual(await buildStrategyIndex(root), []);
+    await writeFile(file, 'invalid .ica');
+    await assert.rejects(buildStrategyIndex(root), /进攻 #1\/A 夹击\.ica/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
