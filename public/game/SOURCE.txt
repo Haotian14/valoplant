@@ -1,6 +1,7 @@
-Map artwork, minimap labels and game icons reused from Icarus Strats.
-The vision/ files reduce the same release's SVG height model walls to
-planar edges at the default standing eye height.
+Map artwork, minimap labels, game icons and weapon icons reused from Icarus Strats.
+The vision/ files reduce the SVG height model to planar edges. The elevation/
+files retain its wall height bands and supports, with ground sampled every
+two SVG units. The navigation/ files retain walkable polygons and portals.
 https://github.com/SunkenInTime/icarus/tree/685586df4a0805adf6b403cd7fe4ce771d617d5e/assets
 
 Icarus copyright 2026 Dara Adedeji. See LICENSES/Apache-2.0.txt and NOTICE at the site root.

@@ -3,9 +3,16 @@ Copyright 2026 Dara Adedeji
 
 The Icarus ability catalog was converted from Dart to JSON for Team Playbook
 and compacted by storing per-map geometry overrides. See src/catalog.json.
-The planar wall files under public/game/vision were generated from the
-Icarus 5.2.1 SVG height models. Door coordinates were adapted from
+The planar walls and compact elevation models under public/game were
+generated from the Icarus 5.2.1 SVG height models. Door coordinates and
+replay actor names were adapted from
 lib/const/map_doors.dart in the same release.
+The replay map registration, agent identifiers and ability catalog under
+src/replay-*.json were adapted from the Icarus 5.2.1 replay tables.
+The planar navigation data under public/game/navigation was generated from
+the same release's map meshes and portal links.
+QuickTime Animation layout in src/quicktime-animation.ts follows the same
+release's QuickTime encoder and container writer.
 The Apache-2.0 license for Icarus material is in LICENSES/Apache-2.0.txt.
 
 Map artwork, minimap labels and agent icons are distributed with their source

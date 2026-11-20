@@ -1,0 +1,727 @@
+{
+  "GameObject_Rift_4_BlackHole": [
+    "astra",
+    0,
+    false
+  ],
+  "GameObject_Rift_Q_FlashBurst": [
+    "astra",
+    1,
+    false
+  ],
+  "GameObject_Rift_E_SmokeZone": [
+    "astra",
+    2,
+    false
+  ],
+  "GameObject_Rift_E_SmokeZone_Fake": [
+    "astra",
+    2,
+    false
+  ],
+  "GameObject_Rift_X_GlobalWall": [
+    "astra",
+    3,
+    false
+  ],
+  "GameObject_Breach_4_FusionBlast": [
+    "breach",
+    0,
+    false
+  ],
+  "Projectile_Breach_4_FusionBlast": [
+    "breach",
+    0,
+    true
+  ],
+  "Projectile_Breach_Q_ThroughWalls_Flash": [
+    "breach",
+    1,
+    false
+  ],
+  "GameObject_Breach_E_SweetSpotFissure": [
+    "breach",
+    2,
+    false
+  ],
+  "GameObject_Breach_X_Shockwave": [
+    "breach",
+    3,
+    false
+  ],
+  "GameObject_Sarge_E_SpeedStim": [
+    "brimstone",
+    0,
+    false
+  ],
+  "Projectile_Sarge_E_SpeedStim": [
+    "brimstone",
+    0,
+    true
+  ],
+  "Patch_Sarge_Q_Molotov_Production": [
+    "brimstone",
+    1,
+    false
+  ],
+  "Projectile_Sarge_Q_Molotov_Production": [
+    "brimstone",
+    1,
+    true
+  ],
+  "GameObject_Sarge_4_Smoke_ProductionNEW": [
+    "brimstone",
+    2,
+    false
+  ],
+  "GameObject_Sarge_X_OrbitalStrike_Production": [
+    "brimstone",
+    3,
+    false
+  ],
+  "GameObject_Deadeye_E_Trap": [
+    "chamber",
+    0,
+    false
+  ],
+  "Patch_Deadeye_E_Slow_Large": [
+    "chamber",
+    0,
+    false
+  ],
+  "GameObject_Deadeye_E_Teleporter_Tether": [
+    "chamber",
+    2,
+    false
+  ],
+  "GameObject_Smonk_Q_DecayExplosion": [
+    "clove",
+    1,
+    false
+  ],
+  "Projectile_Smonk_DecayNade": [
+    "clove",
+    1,
+    true
+  ],
+  "GameObject_Smonk_NewSmoke": [
+    "clove",
+    2,
+    false
+  ],
+  "GameObject_Smonk_NewSmoke_PDS": [
+    "clove",
+    2,
+    false
+  ],
+  "GameObject_Gumshoe_E_TripWire": [
+    "cypher",
+    0,
+    false
+  ],
+  "Zone_Gumshoe_4_Cage": [
+    "cypher",
+    1,
+    false
+  ],
+  "Pawn_Gumshoe_Q_PossessableCamera": [
+    "cypher",
+    2,
+    false
+  ],
+  "GameObject_RemovableObject_GumshoeTrackingDart": [
+    "cypher",
+    2,
+    false
+  ],
+  "Patch_NetToss": [
+    "deadlock",
+    0,
+    false
+  ],
+  "Projectile_NetToss": [
+    "deadlock",
+    0,
+    true
+  ],
+  "Projectile_CableJam_InAir": [
+    "deadlock",
+    2,
+    true
+  ],
+  "GameObject_StealthingTrap_SoundSensor": [
+    "deadlock",
+    1,
+    false
+  ],
+  "GameObject_SoundSensor_SweetSpotFissure": [
+    "deadlock",
+    1,
+    false
+  ],
+  "GameObject_CableJamRoot": [
+    "deadlock",
+    2,
+    false
+  ],
+  "GameObject_FishingHook_CageSphere": [
+    "deadlock",
+    3,
+    false
+  ],
+  "Pawn_BountyHunter_4_WolfHound": [
+    "fade",
+    0,
+    false
+  ],
+  "GameObject_Q_BountyHunter_Tether_SphereExpansion": [
+    "fade",
+    1,
+    false
+  ],
+  "Projectile_Q_BountyHunter_TetherGrenade_SphereExpansion": [
+    "fade",
+    1,
+    true
+  ],
+  "Projectile_E_BountyHunter_Divebomb": [
+    "fade",
+    2,
+    true
+  ],
+  "GameObject_BountyHunter_E_LoSReveal_Source_Reactivate": [
+    "fade",
+    2,
+    false
+  ],
+  "GameObject_BountyHunter_X_WaveForm": [
+    "fade",
+    3,
+    false
+  ],
+  "Patch_Aggrobot_C_ExplodeyPatch": [
+    "gekko",
+    0,
+    false
+  ],
+  "Projectile_Aggrobot_C_ExplodeyPatch": [
+    "gekko",
+    0,
+    true
+  ],
+  "Pawn_Aggrobot_SeekerNade": [
+    "gekko",
+    1,
+    false
+  ],
+  "Projectile_E_Aggrobot_DiscTurret_PowerWave": [
+    "gekko",
+    2,
+    false
+  ],
+  "Pawn_Aggrobot_RollyPolly": [
+    "gekko",
+    3,
+    false
+  ],
+  "GameObject_Mage_4_SplashGrenade": [
+    "harbor",
+    0,
+    false
+  ],
+  "Projectile_Mage_Q_Wall": [
+    "harbor",
+    1,
+    false
+  ],
+  "GameObject_Mage_E_WorldSmoke": [
+    "harbor",
+    2,
+    false
+  ],
+  "GameObject_Mage_X_TidalWave": [
+    "harbor",
+    3,
+    false
+  ],
+  "GameObject_Paprika_4_PullBlast": [
+    "hush",
+    0,
+    false
+  ],
+  "Projectile_Paprika_Q_RedirectFlash": [
+    "hush",
+    1,
+    false
+  ],
+  "Projectile_Paprika_Q_RedirectFlash_Underhand": [
+    "hush",
+    1,
+    false
+  ],
+  "Projectile_Paprika_E_RedirectPull": [
+    "hush",
+    2,
+    true
+  ],
+  "Projectile_Paprika_E_RedirectPull_Underhand": [
+    "hush",
+    2,
+    true
+  ],
+  "GameObject_Paprika_E_RedirectPullArea": [
+    "hush",
+    2,
+    false
+  ],
+  "Projectile_Paprika_X_FullBendPop": [
+    "hush",
+    3,
+    true
+  ],
+  "GameObject_Paprika_X_LevitateZone": [
+    "hush",
+    3,
+    false
+  ],
+  "GameObject_Sequoia_4_MovingCover": [
+    "iso",
+    0,
+    false
+  ],
+  "GameObject_Sequoia_4_MovingCover_Slower": [
+    "iso",
+    0,
+    false
+  ],
+  "Projectile_Sequoia_Q_FragileMissile": [
+    "iso",
+    1,
+    false
+  ],
+  "GameObject_Sequoia_E_Orb": [
+    "iso",
+    2,
+    false
+  ],
+  "GameObject_Sequoia_X_LineCapture": [
+    "iso",
+    3,
+    false
+  ],
+  "GameObject_Wushu_4_SmokeZone": [
+    "jett",
+    0,
+    false
+  ],
+  "Projectile_Wushu_4_Smoke": [
+    "jett",
+    0,
+    true
+  ],
+  "Projectile_Grenadier_Q_SemtexBasic": [
+    "kayo",
+    0,
+    false
+  ],
+  "Projectile_C_Grenadier_Flash": [
+    "kayo",
+    1,
+    false
+  ],
+  "Projectile_C_Grenadier_Flash_Underhand": [
+    "kayo",
+    1,
+    false
+  ],
+  "Projectile_Grenadier_E_SuppressionBlade": [
+    "kayo",
+    2,
+    true
+  ],
+  "Gameobject_Grenadier_E_SuppressionPulse": [
+    "kayo",
+    2,
+    false
+  ],
+  "Gameobject_Grenadier_X_UltPulse": [
+    "kayo",
+    3,
+    false
+  ],
+  "Projectile_Killjoy_4_RemoteBees_MultiDetonate": [
+    "killjoy",
+    0,
+    false
+  ],
+  "GameObject_Killjoy_4_BeeSwarm_Damage": [
+    "killjoy",
+    0,
+    false
+  ],
+  "Pawn_Killjoy_Q_StealthAlarmbot": [
+    "killjoy",
+    1,
+    false
+  ],
+  "Pawn_Killjoy_E_Turret": [
+    "killjoy",
+    2,
+    false
+  ],
+  "GameObject_Killjoy_X_Bomb": [
+    "killjoy",
+    3,
+    false
+  ],
+  "GameObject_Thumper_Concuss": [
+    "miks",
+    0,
+    false
+  ],
+  "Projectile_Thumper_Concuss": [
+    "miks",
+    0,
+    true
+  ],
+  "Projectile_Thumper_Heal": [
+    "miks",
+    1,
+    true
+  ],
+  "GameObject_Thumper_Heal": [
+    "miks",
+    1,
+    false
+  ],
+  "GameObject_Iris_E_Smoke": [
+    "miks",
+    2,
+    false
+  ],
+  "GameObject_Iris_X_SonicWave": [
+    "miks",
+    4,
+    false
+  ],
+  "GameObject_Sprinter_4_Tunnel": [
+    "neon",
+    0,
+    false
+  ],
+  "GameObject_Sprinter_Q_ElectricSphere": [
+    "neon",
+    1,
+    false
+  ],
+  "Projectile_Wraith_Q_NearsightMissile": [
+    "omen",
+    1,
+    false
+  ],
+  "Zone_Wraith_4_Smoke": [
+    "omen",
+    2,
+    false
+  ],
+  "Projectile_Wraith_4_Smoke": [
+    "omen",
+    2,
+    true
+  ],
+  "Intention_Wraith_X_GlobalTeleport": [
+    "omen",
+    3,
+    false
+  ],
+  "GameObject_Phoenix_Q_FlameWallManager_Production": [
+    "pheonix",
+    0,
+    false
+  ],
+  "Patch_Phoenix_MolotovFire": [
+    "pheonix",
+    2,
+    false
+  ],
+  "Projectile_Phoenix_E_FlareCurve_Synced": [
+    "pheonix",
+    1,
+    false
+  ],
+  "Projectile_Phoenix_E_FlareCurve_Synced_Right": [
+    "pheonix",
+    1,
+    false
+  ],
+  "Projectile_Phoenix_4_Molotov_Production": [
+    "pheonix",
+    2,
+    true
+  ],
+  "Projectile_Phoenix_Q_FlameWall_ThroughWall": [
+    "pheonix",
+    0,
+    true
+  ],
+  "GameObject_Phoenix_X_ResTarget_Production": [
+    "pheonix",
+    3,
+    false
+  ],
+  "Pawn_Clay_E_Boomba": [
+    "raze",
+    0,
+    false
+  ],
+  "Projectile_Clay_Q_Satchel_Arming": [
+    "raze",
+    1,
+    false
+  ],
+  "Projectile_Clay_4_Projectile_Primary": [
+    "raze",
+    2,
+    false
+  ],
+  "Projectile_Clay_X_Rocket": [
+    "raze",
+    3,
+    false
+  ],
+  "GameObject_Vampire_4_NearsightAOE_Source": [
+    "reyna",
+    0,
+    false
+  ],
+  "Projectile_Vampire_4_NearsightAoE": [
+    "reyna",
+    0,
+    true
+  ],
+  "GameObject_Thorne_E_Wall_Fortifying": [
+    "sage",
+    0,
+    false
+  ],
+  "Patch_Thorne_4_SlowField_Production": [
+    "sage",
+    1,
+    false
+  ],
+  "Projectile_Thorne_4_SlowFIeld_Production": [
+    "sage",
+    1,
+    true
+  ],
+  "GameObject_Guide_4_Heal_AOE": [
+    "skye",
+    0,
+    false
+  ],
+  "Pawn_Guide_Q_PossessableScout": [
+    "skye",
+    1,
+    false
+  ],
+  "Projectile_Guide_E_HawkFlash": [
+    "skye",
+    2,
+    false
+  ],
+  "GameObject_Guide_E_HawkFlash_FlashSource": [
+    "skye",
+    2,
+    false
+  ],
+  "Pawn_Guide_X_Pack": [
+    "skye",
+    3,
+    false
+  ],
+  "Pawn_Hunter_E_Drone": [
+    "sova",
+    0,
+    false
+  ],
+  "GameObject_Hunter_E_Drone_RevealDart": [
+    "sova",
+    0,
+    false
+  ],
+  "GameObject_Hunter_4_ExplosiveBolt_Explosion": [
+    "sova",
+    1,
+    false
+  ],
+  "GameObject_Hunter_Q_SonarBolt": [
+    "sova",
+    2,
+    false
+  ],
+  "Projectile_Hunter_4_ExplosiveBolt": [
+    "sova",
+    1,
+    true
+  ],
+  "Projectile_Hunter_Q_RevealBolt": [
+    "sova",
+    2,
+    true
+  ],
+  "Pawn_Cashew_4_Spider_LockOn": [
+    "tejo",
+    0,
+    false
+  ],
+  "GameObject_Cashew_4_SonarPing": [
+    "tejo",
+    0,
+    false
+  ],
+  "Projectile_Cashew_Q_ShellShockGrenade": [
+    "tejo",
+    1,
+    false
+  ],
+  "Projectile_Cashew_Q_ShellShockGrenade_Bounce": [
+    "tejo",
+    1,
+    false
+  ],
+  "GameObject_Cashew_Q_ShellShockGrenade": [
+    "tejo",
+    1,
+    false
+  ],
+  "GameObject_Cashew_E_MapMissileMarker": [
+    "tejo",
+    2,
+    false
+  ],
+  "GameObject_Cashew_E_MapMissileMarker_SecondRocket": [
+    "tejo",
+    2,
+    false
+  ],
+  "GameObject_Cashew_E_Explosion": [
+    "tejo",
+    2,
+    false
+  ],
+  "GameObject_Cashew_X_SegmentManager": [
+    "tejo",
+    3,
+    false
+  ],
+  "GameObject_Pine_4_UsableTeleport": [
+    "veto",
+    0,
+    false
+  ],
+  "GameObject_Pine_Q_SeizeTrap": [
+    "veto",
+    1,
+    false
+  ],
+  "GameObject_Pine_Q_Tether_SphereExpansion": [
+    "veto",
+    1,
+    false
+  ],
+  "Pawn_Pine_E_RadEater": [
+    "veto",
+    2,
+    false
+  ],
+  "Patch_Pandemic_AcidMolotov_NewMolotov": [
+    "viper",
+    0,
+    false
+  ],
+  "GameObject_Pandemic_4_SmokeZone": [
+    "viper",
+    1,
+    false
+  ],
+  "GameObject_Pandemic_E_SmokeScreenManager": [
+    "viper",
+    2,
+    false
+  ],
+  "Patch_Pandemic_X_Circular": [
+    "viper",
+    3,
+    false
+  ],
+  "GameObject_Nox_Wall": [
+    "vyse",
+    0,
+    false
+  ],
+  "GameObject_Nox_WallTrap": [
+    "vyse",
+    0,
+    false
+  ],
+  "GameObject_Nox_BarbedWire": [
+    "vyse",
+    1,
+    false
+  ],
+  "Projectile_Nox_BarbedWire": [
+    "vyse",
+    1,
+    true
+  ],
+  "Patch_Nox_BarbedWire": [
+    "vyse",
+    1,
+    false
+  ],
+  "GameObject_Nox_StealthingTrap_Flash_2": [
+    "vyse",
+    2,
+    false
+  ],
+  "Gameobject_Nox_DisarmPulse": [
+    "vyse",
+    3,
+    false
+  ],
+  "GameObject_Terra_C_TimeSlowGrenade_Explosion": [
+    "waylay",
+    0,
+    false
+  ],
+  "GameObject_Terra_E_RewindTime_RewindTarget": [
+    "waylay",
+    2,
+    false
+  ],
+  "GameObject_Terra_X_DelayedBeam_Beam": [
+    "waylay",
+    3,
+    false
+  ],
+  "Pawn_Stealth_4_Decoy_V2": [
+    "yoru",
+    0,
+    false
+  ],
+  "Projectile_Stealth_Q_BounceFlash": [
+    "yoru",
+    1,
+    false
+  ],
+  "Pawn_Stealth_E_TeleporterMoving_FakeTP": [
+    "yoru",
+    2,
+    false
+  ],
+  "Pawn_Stealth_E_TeleporterStationary_FakeTP": [
+    "yoru",
+    2,
+    false
+  ]
+}
