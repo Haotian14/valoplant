@@ -1,0 +1,5 @@
+Map artwork, minimap labels and game icons reused from Icarus Strats.
+https://github.com/SunkenInTime/icarus/tree/685586df4a0805adf6b403cd7fe4ce771d617d5e/assets
+
+Icarus copyright 2026 Dara Adedeji. See LICENSES/Apache-2.0.txt and NOTICE at the site root.
+VALORANT and related game assets belong to Riot Games.

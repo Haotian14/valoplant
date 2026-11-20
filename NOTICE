@@ -1,0 +1,10 @@
+Icarus
+Copyright 2026 Dara Adedeji
+
+The Icarus ability catalog was converted from Dart to JSON for Team Playbook
+and compacted by storing per-map geometry overrides. See src/catalog.json.
+The Apache-2.0 license for Icarus material is in LICENSES/Apache-2.0.txt.
+
+Map artwork, minimap labels and agent icons are distributed with their source
+attribution in game/SOURCE.txt in the built site. VALORANT and its related
+game assets belong to Riot Games.
