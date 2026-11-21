@@ -75,7 +75,7 @@ function contains(rings: number[][], evenOdd: boolean, x: number, y: number) {
   return evenOdd ? Math.abs(winding) % 2 !== 0 : winding !== 0;
 }
 
-export function elevationsAt(model: HeightModel, origin: Point) {
+export function elevationsAt(model: HeightModel, origin: Point, navigationFloors: readonly number[] = []) {
   const { frame, step, grid, columns, rows, camera } = model;
   const x = (origin.dx - frame.x) / frame.scale, y = (origin.dy - frame.y) / frame.scale;
   const col = Math.floor(x / step), row = Math.floor(y / step);
@@ -92,6 +92,10 @@ export function elevationsAt(model: HeightModel, origin: Point) {
     const height = Math.round(((plane ? plane[0] * x + plane[1] * y + plane[2] : surface) + camera) * 100);
     if (!choices.some(choice => Math.abs(choice.height - height) <= 2)) choices.push({ label: label || '站立面', height });
     if (auto) automatic = Math.max(automatic ?? -Infinity, height);
+  }
+  for (const floor of navigationFloors) {
+    const height = Math.round(floor + camera * 100);
+    if (!choices.some(choice => Math.abs(choice.height - height) <= 8)) choices.push({ label: '站立面', height });
   }
   return { choices: choices.sort((a, b) => a.height - b.height), automatic };
 }

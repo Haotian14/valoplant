@@ -16,6 +16,7 @@ import { canRotate, canRotateRange, stepObjectRotation } from './object-handles.
 import { changedMapDoors, findMapDoor, toggleMapDoor } from './map-doors.ts';
 import { loadSightWalls, sightDoorWalls, sightPolygon } from './map-vision.ts';
 import { elevationsAt, loadHeightModel, resolvedElevation, wallsAtElevation, type ElevationChoice } from './height-vision.ts';
+import { loadNavigation, navigationFloorsAt } from './navigation.ts';
 import { initialWallPath, savedWallPath } from './wall-path.ts';
 import { downloadIca, imageExtensions } from './archive.ts';
 import { append, appendLineup, drawingCollections, moveItem, newId, newPage, patchItem, reindexPages, removeItems, type CanvasItem,
@@ -141,7 +142,7 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
   const [captionRead, setCaptionRead] = useState<string>();
   const [sightlineReport, setSightlineReport] = useState<string>();
   const [elevationMenu, setElevationMenu] = useState<{
-    item: CanvasSelection; pageId: string; choices: ElevationChoice[]; automatic?: number; manual?: number;
+    item: CanvasSelection; pageId: string; choices: ElevationChoice[]; automatic?: number; manual?: number; eyeOffset: number;
   }>();
   const hovered = useRef<{ item: CanvasSelection; screen: Point } | undefined>(undefined);
   const lastDrawing = useRef<Tool>('pencil');
@@ -426,6 +427,14 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
     setContext(undefined);
   }
 
+  async function markerElevations(origin: Point, collection: Collection, attack: boolean) {
+    const [model, navigation] = await Promise.all([
+      loadHeightModel(map, attack),
+      collection === 'agentData' ? loadNavigation(map).catch(() => undefined) : undefined,
+    ]);
+    return { model, available: elevationsAt(model, origin, navigationFloorsAt(navigation, origin, attack)) };
+  }
+
   async function inspectSightline(item: CanvasItem, collection: Collection, cone: { angle: number; radius: number }) {
     setContext(undefined);
     const attack = pageIsAttack(page);
@@ -433,9 +442,9 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
     const rotation = ('rotation' in item ? item.rotation ?? 0 : 0) + (canonicalMarkers(page, version) ? 0 : Math.PI);
     const doors = new Set(changedMapDoors(page, map));
     try {
-      const model = await loadHeightModel(map, attack).catch(() => undefined);
-      const elevation = model && resolvedElevation(elevationsAt(model, origin), 'visionElevation' in item ? item.visionElevation : undefined);
-      const walls = model && elevation != null ? wallsAtElevation(model, elevation) : await loadSightWalls(map, attack);
+      const height = await markerElevations(origin, collection, attack).catch(() => undefined);
+      const elevation = height && resolvedElevation(height.available, 'visionElevation' in item ? item.visionElevation : undefined);
+      const walls = height && elevation != null ? wallsAtElevation(height.model, elevation) : await loadSightWalls(map, attack);
       const boundary = sightPolygon([...walls, ...sightDoorWalls(map, attack, doors)], origin, cone.radius, rotation, cone.angle);
       const distance = (value: number) => (value / metersToWorld(1, map)).toFixed(2) + ' m';
       const closest = boundary?.reduce((nearest, p) => {
@@ -459,9 +468,11 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
   async function openElevation(item: CanvasItem, selected: CanvasSelection) {
     setContext(undefined);
     try {
-      const model = await loadHeightModel(map, pageIsAttack(page));
-      const choices = elevationsAt(model, worldMarker(item, selected.collection, map, page, version));
-      setElevationMenu({ ...choices, item: selected, pageId: page.id, manual: 'visionElevation' in item ? item.visionElevation : undefined });
+      const origin = worldMarker(item, selected.collection, map, page, version);
+      const { available, model } = await markerElevations(origin, selected.collection, pageIsAttack(page));
+      setElevationMenu({ ...available, item: selected, pageId: page.id,
+        manual: 'visionElevation' in item ? item.visionElevation : undefined,
+        eyeOffset: selected.collection === 'agentData' ? model.camera * 100 : 0 });
     } catch {
       notify('读取地图高度数据失败');
     }
@@ -1266,12 +1277,14 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
           </button>}
         {contextItem && 'text' in contextItem &&
           <button type="button" onClick={() => editItem(context.item)}><Type size={15} />{t('编辑文本')}</button>}
-        {contextItem && contextVision && <>
-          <button type="button" onClick={() => void openElevation(contextItem, context.item)}><Layers size={15} />{t('视线高度')}</button>
+        {contextItem && (context.item.collection === 'agentData' || contextVision) &&
+          <button type="button" onClick={() => void openElevation(contextItem, context.item)}>
+            <Layers size={15} />{t(context.item.collection === 'agentData' ? '站立高度' : '视线高度')}
+          </button>}
+        {contextItem && contextVision &&
           <button type="button" onClick={() => void inspectSightline(contextItem, context.item.collection, contextVision)}>
             <Eye size={15} />{t('视线报告')}
-          </button>
-        </>}
+          </button>}
         {[-1, 1].filter(direction => pages[pageIndex + direction]).map(direction =>
           <button key={direction} type="button" onClick={() => copyToNeighbor(direction, context.item)}>
             <Copy size={15} />{t('复制到')}{direction < 0 ? t('上一页') : t('下一页')}
@@ -1304,7 +1317,8 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
         <Copy size={15} />{t('复制报告')}
       </button></div>
     </Modal>}
-    {elevationMenu && <Modal title={t('视线高度')} onClose={() => setElevationMenu(undefined)}>
+    {elevationMenu && <Modal title={t(elevationMenu.item.collection === 'agentData' ? '站立高度' : '视线高度')}
+      onClose={() => setElevationMenu(undefined)}>
       <div className="draft-switcher">{[{ label: '自动', height: undefined }, ...elevationMenu.choices].map(choice => {
         const meters = choice.height ?? (choice.label === '自动' ? elevationMenu.automatic : undefined);
         const checked = choice.height == null ? elevationMenu.manual == null :
@@ -1313,7 +1327,8 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
           const { item, pageId } = elevationMenu;
           commit(previous => updatePage(previous, pageId, row => patchItem(row, item.collection, item.id, { visionElevation: choice.height })));
           setElevationMenu(undefined);
-        }}>{checked && <Check size={15} />}{choice.label}{meters != null && ` · ${(meters / 100).toFixed(2)} m`}</button>;
+        }}>{checked && <Check size={15} />}{t(choice.label)}
+          {meters != null && ` · ${((meters - elevationMenu.eyeOffset) / 100).toFixed(2)} m`}</button>;
       })}</div>
       {!elevationMenu.choices.length && <p className="muted">{t('当前位置没有采样到可用站立面。')}</p>}
     </Modal>}

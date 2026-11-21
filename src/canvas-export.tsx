@@ -8,6 +8,7 @@ import { pageIsAttack, uprightDimensions, uprightPosition } from './geometry.ts'
 import { changedMapDoors, findMapDoor } from './map-doors.ts';
 import { loadSightWalls, sightDoorWalls } from './map-vision.ts';
 import { loadHeightModel } from './height-vision.ts';
+import { loadNavigation } from './navigation.ts';
 import { drawingCollections, type Page, type Strategy, type TextMarker } from './strategy.ts';
 import { formattedLines } from './text-content.ts';
 import { parsePalette, themedMap } from './preferences.ts';
@@ -55,8 +56,10 @@ async function snapshot(
   const frame = mapArtworkFrame(map, attack);
   const changed = new Set(changedMapDoors(page, map));
   const doors = sightDoorWalls(map, attack, changed);
-  const [flat, model] = await Promise.all([
+  const hasAgentElevation = page.agentData.some(agent => !agent.isDeleted && agent.kind === 'viewCone' && agent.visionElevation != null);
+  const [flat, model, navigation] = await Promise.all([
     loadSightWalls(map, attack).catch(() => []), loadHeightModel(map, attack).catch(() => undefined),
+    hasAgentElevation ? loadNavigation(map).catch(() => undefined) : undefined,
   ]);
   const walls = [...flat, ...doors];
   const palette = parsePalette(strategy.document.themePalette);
@@ -87,7 +90,7 @@ async function snapshot(
     {!options.transparent && <rect x={frame.x - 24} y={frame.y - 24} width={viewWidth} height={viewHeight} fill="#17151f" />}
     <MapArtwork map={map} attack={attack} layers={options.layers} mapImage={mapImage} />
     <MapDoorBars map={map} attack={attack} active={false} changed={changed} toggle={() => {}} />
-    <VisionWalls.Provider value={walls}><VisionHeight.Provider value={model ? { model, doors } : null}>
+    <VisionWalls.Provider value={walls}><VisionHeight.Provider value={model ? { model, doors, navigation, attack } : null}>
       {(['imageData', 'utilityData', 'abilityData', 'agentData', 'drawingData'] as const).flatMap(collection =>
         page[collection].filter(item => !findMapDoor(item, map)).map(item =>
           <CanvasObject key={`${collection}-${item.id}`} item={item} collection={collection} map={map} page={page}

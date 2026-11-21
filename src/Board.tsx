@@ -10,9 +10,9 @@ import { objectHandles, transformObject, type ObjectFrame, type ObjectHandle } f
 import { savedWallPath } from './wall-path.ts';
 import { changedMapDoors, findMapDoor, mapDoors, type MapDoor } from './map-doors.ts';
 import { loadSightWalls, nearestSightWall, sightDoorWalls, type SightSegment } from './map-vision.ts';
-import { loadHeightModel, type HeightModel } from './height-vision.ts';
+import { elevationsAt, loadHeightModel, resolvedElevation, type HeightModel } from './height-vision.ts';
 import { themedMap, type MapPalette } from './preferences.ts';
-import { loadNavigation, routeAcrossMap, type Navigation } from './navigation.ts';
+import { loadNavigation, navigationFloorsAt, routeAcrossMap, type Navigation, type RoutePoint } from './navigation.ts';
 import {
   bounds, drawingCollections, moveItem, newId, positionOf,
   type AbilityMarker, type AgentMarker, type CanvasItem, type CanvasSelection, type Drawing, type LineupLink, type Page,
@@ -113,7 +113,7 @@ export default function Board(props: Props) {
   const [mapWalls, setMapWalls] = useState<{ map: MapInfo; attack: boolean; walls: SightSegment[] }>();
   const [heightData, setHeightData] = useState<{ map: MapInfo; attack: boolean; model: HeightModel }>();
   const [mapImage, setMapImage] = useState<string>();
-  const [navigation, setNavigation] = useState<Navigation>();
+  const [navigationData, setNavigationData] = useState<{ map: MapInfo; nodes: Navigation }>();
 
   const artworkWidth = Math.min(1240, worldHeight * map.width / map.height);
   const height = Math.max(1120, (artworkWidth + 120) / aspect) / camera.zoom;
@@ -128,24 +128,33 @@ export default function Board(props: Props) {
     ...(mapWalls?.map === map && mapWalls.attack === attack ? mapWalls.walls : []),
     ...doorWalls,
   ], [mapWalls, map, attack, doorWalls]);
+  const navigation = navigationData?.map === map ? navigationData.nodes : undefined;
   const heightVision = useMemo(() => heightData?.map === map && heightData.attack === attack
-    ? { model: heightData.model, doors: doorWalls } : null, [heightData, map, attack, doorWalls]);
+    ? { model: heightData.model, doors: doorWalls, navigation, attack } : null, [heightData, map, attack, doorWalls, navigation]);
   const canToggleDoor = tool === 'select' && !props.animate && !props.externalDrag && !props.editingTextId;
   const agentRoutes = useMemo(() => {
-    const routes = new Map<string, Point[]>();
+    const routes = new Map<string, RoutePoint[]>();
     const prior = props.transitionFrom;
     if (!navigation || !prior || pageIsAttack(prior) !== attack) return routes;
+    const model = heightVision?.model;
+    const floorAt = (position: Point, marker: AgentMarker) => {
+      if (!model) return;
+      const floors = marker.visionElevation == null ? [] : navigationFloorsAt(navigation, position, attack);
+      const eye = resolvedElevation(elevationsAt(model, position, floors), marker.visionElevation);
+      return eye == null ? undefined : eye - model.camera * 100;
+    };
     for (const next of page.agentData) {
       const before = prior.agentData.find(item => item.id === next.id);
       if (!before || before.isDeleted || next.isDeleted) continue;
       const start = worldMarker(before, 'agentData', map, prior, version);
       const end = worldMarker(next, 'agentData', map, page, version);
-      if (distance(start, end) < 3) continue;
-      const route = routeAcrossMap(navigation, start, end, attack, doorWalls);
+      if (distance(start, end) < 3 && before.visionElevation === next.visionElevation) continue;
+      const route = routeAcrossMap(navigation, start, end, attack, doorWalls,
+        { start: floorAt(start, before), end: floorAt(end, next) });
       if (route) routes.set(next.id, route);
     }
     return routes;
-  }, [navigation, props.transitionFrom, page.agentData, attack, map, doorWalls, version]);
+  }, [navigation, props.transitionFrom, page.agentData, attack, map, doorWalls, heightVision, version]);
   const single = tool === 'select' && props.selection.length === 1 && !props.editingTextId && props.selection[0];
   const handleItem = single && page[single.collection].find(item => item.id === single.id);
   const frame = single && handleItem && (!props.hideAgents || single.collection !== 'agentData')
@@ -216,8 +225,7 @@ export default function Board(props: Props) {
   }, [map, attack]);
   useEffect(() => {
     let live = true;
-    setNavigation(undefined);
-    void loadNavigation(map).then(data => { if (live) setNavigation(data); }).catch(() => {});
+    void loadNavigation(map).then(nodes => { if (live) setNavigationData({ map, nodes }); }).catch(() => {});
     return () => { live = false; };
   }, [map]);
 

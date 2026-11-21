@@ -1,6 +1,5 @@
 import { t } from './locale.ts';
 import { createContext, Fragment, useContext, useLayoutEffect, useMemo, useRef, type PointerEvent, type ReactNode } from 'react';
-import { distance } from './board-gestures.ts';
 import {
   abilityFor, abilityGeometry, agentById, cssColor, gameAsset, mapArtworkFrame, project, virtualToWorld, worldPerMeter, worldWidth,
   type MapInfo, type Point,
@@ -15,6 +14,7 @@ import { sightPolygon, type SightSegment } from './map-vision.ts';
 import { elevationsAt, resolvedElevation, wallsAtElevation, type HeightModel } from './height-vision.ts';
 import { isWeapon, weaponName } from './weapons.ts';
 import { formattedLines, textLinks, type FormattedPart } from './text-content.ts';
+import { navigationFloorsAt, routeOffsets, type Navigation, type RoutePoint } from './navigation.ts';
 
 const allyColor = '#57d0ac';
 const enemyColor = '#f17587';
@@ -26,7 +26,9 @@ const abilityIconSize = (page: Page) => (page.settings.abilitySize ?? 25) * virt
 
 export type MapLayers = { callouts: boolean; barriers: boolean; orbs: boolean; grid: boolean; captions: boolean };
 export const VisionWalls = createContext<readonly SightSegment[]>([]);
-export const VisionHeight = createContext<{ model: HeightModel; doors: readonly SightSegment[] } | null>(null);
+export const VisionHeight = createContext<{
+  model: HeightModel; doors: readonly SightSegment[]; attack: boolean; navigation?: Navigation;
+} | null>(null);
 export const VisionOpacity = createContext(.15);
 
 export function MapArtwork({ map, attack, layers, mapImage }: { map: MapInfo; attack: boolean; layers: MapLayers; mapImage?: string }) {
@@ -73,21 +75,22 @@ export function MapDoorBars({ map, attack, changed, active, toggle, amounts }: {
   })}</g>;
 }
 
-function useSightPath(origin: Point, radius: number, sweep: number, rotation: number, elevation?: number) {
+function useSightPath(origin: Point, radius: number, sweep: number, rotation: number, elevation?: number, agent?: boolean) {
   const walls = useContext(VisionWalls);
   const height = useContext(VisionHeight);
   return useMemo(() => {
-    const eye = height && resolvedElevation(elevationsAt(height.model, origin), elevation);
+    const floors = height && agent && elevation != null ? navigationFloorsAt(height.navigation, origin, height.attack) : [];
+    const eye = height && resolvedElevation(elevationsAt(height.model, origin, floors), elevation);
     const blockers = height && eye != null ? [...wallsAtElevation(height.model, eye), ...height.doors] : walls;
     const boundary = sightPolygon(blockers, origin, radius, rotation * Math.PI / 180, sweep);
     return boundary && `M ${boundary.map(p => `${p.dx.toFixed(2)} ${p.dy.toFixed(2)}`).join(' L ')} Z`;
-  }, [walls, height, origin.dx, origin.dy, radius, sweep, rotation, elevation]);
+  }, [walls, height, origin.dx, origin.dy, radius, sweep, rotation, elevation, agent]);
 }
 
-function VisionSector({ origin, color, radius, sweep, rotation, elevation }: {
-  origin: Point; color: string; radius: number; sweep: number; rotation: number; elevation?: number;
+function VisionSector({ origin, color, radius, sweep, rotation, elevation, agent }: {
+  origin: Point; color: string; radius: number; sweep: number; rotation: number; elevation?: number; agent?: boolean;
 }) {
-  const path = useSightPath(origin, radius, sweep, rotation, elevation);
+  const path = useSightPath(origin, radius, sweep, rotation, elevation, agent);
   const opacity = useContext(VisionOpacity);
   return <path d={path ?? sectorPath(radius, sweep)} transform={path ? undefined : `rotate(${rotation})`}
     fill={color} fillOpacity={opacity} stroke={color} strokeWidth="2" strokeOpacity=".66" pointerEvents="none" />;
@@ -154,7 +157,7 @@ export function AgentArt({ marker, page, map, rotation, origin }: {
   const size = (page.settings.agentSize ?? 35) * virtualToWorld * .64;
   const color = teamColor(page, marker.isAlly);
   return <>
-    {marker.kind === 'viewCone' && <VisionSector origin={origin} radius={(marker.length ?? 85) * virtualToWorld}
+    {marker.kind === 'viewCone' && <VisionSector agent origin={origin} radius={(marker.length ?? 85) * virtualToWorld}
       sweep={Number(marker.presetType?.replace('viewCone', '')) || 90} color={color} rotation={rotation} elevation={marker.visionElevation} />}
     {marker.kind === 'circle' && <circle r={metersToWorld(marker.diameterMeters ?? 8, map) / 2}
       fill={cssColor(marker.colorValue, color)} fillOpacity={(marker.opacityPercent ?? 16) / 100} stroke={cssColor(marker.colorValue, color)} strokeWidth="2" />}
@@ -346,17 +349,16 @@ export function CanvasObject({ item, collection, map, page, version, selected, a
   item: CanvasItem; collection: Collection; map: MapInfo; page: Page; version: number;
   selected: boolean; animate: boolean; media: Record<string, string>; editText?: (text: string | undefined) => void;
   showCaption?: boolean; openCaption?: (caption: string) => void;
-  route?: Point[];
+  route?: RoutePoint[];
 }) {
   const object = useRef<SVGGElement>(null);
   useLayoutEffect(() => {
     const marker = object.current;
     if (!route || route.length < 2 || !marker?.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    let total = 0;
-    const length = route.map((step, index) => index ? total += distance(route[index - 1], step) : 0);
-    if (!total) return;
+    const offsets = routeOffsets(route);
+    if (!offsets) return;
     const frames = route.map((step, index) => ({
-      transform: `translate(${step.dx}px, ${step.dy}px)`, offset: length[index] / total,
+      transform: `translate(${step.dx}px, ${step.dy}px)`, offset: offsets[index],
     }));
     const animation = marker.animate(frames, { duration: 420, easing: 'ease-in-out' });
     return () => animation.cancel();

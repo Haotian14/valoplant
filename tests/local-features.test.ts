@@ -6,8 +6,9 @@ import { makeAgent, copyToPage, flipPage, worldMarker } from '../src/geometry.ts
 import { mapArtworkFrame, mapById, point, project } from '../src/catalog.ts';
 import { copyCanvasObjects, encodeCanvasClipboard, pasteCanvasObjects, readCanvasClipboard } from '../src/canvas-clipboard.ts';
 import { elevationsAt, prepareHeightModel, resolvedElevation, wallsAtElevation } from '../src/height-vision.ts';
+import { distance } from '../src/board-gestures.ts';
 import { nearestSightWall } from '../src/map-vision.ts';
-import { prepareNavigation, routeAcrossMap, type NavSource } from '../src/navigation.ts';
+import { navigationFloorsAt, prepareNavigation, routeAcrossMap, routeOffsets, type NavSource, type RoutePoint } from '../src/navigation.ts';
 import { decodeReplay, replayAgent, replayCastName, replayDoorsAt, replayPosition, replaySpikeAt, replayUtilityAt } from '../src/replay.ts';
 import { formattedLines, textLinks } from '../src/text-content.ts';
 import { quickTimeFrame, transparentMovie } from '../src/quicktime-animation.ts';
@@ -102,6 +103,82 @@ test('released navigation assets produce matching routes across map sides', () =
   assert.ok(route && route.length >= 2);
   assert.deepEqual(routeAcrossMap(nodes, project(from, false), project(to, false), false, []),
     route.map(p => project(p, false)));
+});
+
+test('Abyss routes between B Main and Mid Bend through the ascender', () => {
+  const input = JSON.parse(readFileSync(new URL('../public/game/navigation/abyss.json', import.meta.url), 'utf8')) as NavSource;
+  const { x, y, scale } = mapArtworkFrame(mapById.abyss, true);
+  const at = (dx: number, dy: number) => point(x + dx * scale, y + dy * scale);
+  const bMain = at(103, 295), midBend = at(161, 282);
+  const length = (route: ReturnType<typeof routeAcrossMap>) => {
+    assert.ok(route);
+    return route.slice(1).reduce((sum, step, index) => sum + distance(route[index], step), 0);
+  };
+  const nodes = prepareNavigation(input);
+  const route = routeAcrossMap(nodes, bMain, midBend, true, []);
+  const walking = prepareNavigation({ ...input, traversals: undefined });
+  const detour = length(routeAcrossMap(walking, bMain, midBend, true, []));
+  assert.ok(length(route) < detour / 4);
+  assert.ok(length(routeAcrossMap(nodes, midBend, bMain, true, [])) < detour / 4);
+  assert.deepEqual(routeAcrossMap(nodes, project(bMain, false), project(midBend, false), false, []),
+    route?.map(p => project(p, false)));
+  const top = at(143.65, 278), bottom = at(143.65, 301);
+  assert.equal(length(routeAcrossMap(nodes, bMain, midBend, true, [[top.dx, top.dy, bottom.dx, bottom.dy]])), detour);
+});
+
+const traversalsByMap = { ascent: 1, bind: 2, breeze: 1, fracture: 3, haven: 1, icebox: 1, lotus: 1, split: 2, summit: 2 };
+for (const [id, count] of Object.entries(traversalsByMap)) {
+  test(`${id} follows the map's cross-floor and special movement links in the supported directions`, () => {
+    const input = JSON.parse(readFileSync(new URL(`../public/game/navigation/${id}.json`, import.meta.url), 'utf8')) as NavSource;
+    const nodes = prepareNavigation(input);
+    assert.equal(input.traversals?.length, count);
+    for (const { from, to, bidirectional, teleport } of input.traversals!) {
+      const [fromId, x1, y1] = from, [toId, x2, y2] = to;
+      const entry = point(x1, y1), exit = point(x2, y2);
+      const start = nodes[fromId]!.center, end = nodes[toId]!.center;
+      const startFloor = nodes[fromId]!.floor ?? undefined, endFloor = nodes[toId]!.floor ?? undefined;
+      const containsLeg = (path: RoutePoint[] | undefined, a: Point, b: Point) => path?.some((step, i) =>
+        step.dx === a.dx && step.dy === a.dy && path[i + 1]?.dx === b.dx && path[i + 1]?.dy === b.dy) ?? false;
+      const route = routeAcrossMap(nodes, start, end, true, [], { start: startFloor, end: endFloor });
+      assert.ok(route && containsLeg(route, entry, exit));
+      assert.equal(route.some(step => step.teleport), !!teleport);
+      const reverse = routeAcrossMap(nodes, end, start, true, [], { start: endFloor, end: startFloor });
+      assert.equal(containsLeg(reverse, exit, entry), !!bidirectional);
+      const defense = routeAcrossMap(nodes, project(start, false), project(end, false), false, [],
+        { start: startFloor, end: endFloor });
+      assert.deepEqual(defense, route.map(step => step.teleport
+        ? { ...project(step, false), teleport: true } : project(step, false)));
+    }
+  });
+}
+
+test('Ascent sends a marker from the selected upper floor through the Heaven drop', () => {
+  const input = JSON.parse(readFileSync(new URL('../public/game/navigation/ascent.json', import.meta.url), 'utf8')) as NavSource;
+  const nodes = prepareNavigation(input);
+  const start = point(1225.7, 255.3), end = point(1225.7, 272.1);
+  for (const attack of [true, false]) {
+    const side = attack ? 'attack' : 'defense';
+    const model = prepareHeightModel(readFileSync(new URL(`../public/game/elevation/ascent-${side}.json.gz`, import.meta.url)),
+      mapById.ascent, attack);
+    const from = project(start, attack), to = project(end, attack);
+    const floorHeights = navigationFloorsAt(nodes, from, attack);
+    const available = elevationsAt(model, from, floorHeights);
+    assert.equal(floorHeights.length, 2);
+    assert.equal(available.choices.length, 2);
+    const [lower, upper] = available.choices;
+    const eyeOffset = model.camera * 100;
+    const upperRoute = routeAcrossMap(nodes, from, to, attack, [], { start: upper.height - eyeOffset, end: 500 });
+    const lowerRoute = routeAcrossMap(nodes, from, to, attack, [], { start: lower.height - eyeOffset, end: 500 });
+    const [drop] = input.traversals!;
+    const entry = project(point(drop.from[1], drop.from[2]), attack);
+    assert.ok(upperRoute?.some(step => distance(step, entry) < .001));
+    assert.ok(lowerRoute && !lowerRoute.some(step => distance(step, entry) < .001));
+  }
+});
+
+test('teleporter animation has the same offset at entry and arrival', () => {
+  assert.deepEqual(routeOffsets([point(0, 0), point(5, 0), { ...point(100, 0), teleport: true }, point(115, 0)]),
+    [0, .25, .25, 1]);
 });
 
 test('plain HTTP links and inline formats remain separate from markup', () => {
