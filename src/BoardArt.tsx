@@ -137,7 +137,7 @@ export function AgentArt({ marker, page, map, rotation, origin }: {
   marker: AgentMarker; page: Page; map: MapInfo; rotation: number; origin: Point;
 }) {
   const agent = agentById[marker.type];
-  const size = (page.settings.agentSize ?? 35) * virtualToWorld * .8;
+  const size = (page.settings.agentSize ?? 35) * virtualToWorld * .64;
   const color = teamColor(page, marker.isAlly);
   return <>
     {marker.kind === 'viewCone' && <VisionSector origin={origin} radius={(marker.length ?? 85) * virtualToWorld}
