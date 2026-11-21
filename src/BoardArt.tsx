@@ -21,6 +21,7 @@ const enemyColor = '#f17587';
 const tone = (ally?: boolean) => ally === false ? enemyColor : allyColor;
 const teamColor = (page: Page, ally?: boolean) => page.settings.useNeutralTeamColors === true ? '#dfd9e7' : tone(ally);
 const degrees = (value: number) => value * 180 / Math.PI;
+const abilityIconSize = (page: Page) => (page.settings.abilitySize ?? 25) * virtualToWorld / 2;
 
 export type MapLayers = { callouts: boolean; barriers: boolean; orbs: boolean; grid: boolean; captions: boolean };
 export const VisionWalls = createContext<readonly SightSegment[]>([]);
@@ -165,7 +166,7 @@ export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = 
   if (!ability) return <circle r={12} fill={teamColor(page, marker.isAlly)} />;
   const geometry = abilityGeometry(ability, map.id);
   const color = cssColor(geometry.color, teamColor(page, marker.isAlly));
-  const size = (page.settings.abilitySize ?? 25) * virtualToWorld;
+  const size = abilityIconSize(page);
   const radius = (geometry.diameter ?? 0) * virtualToWorld / 2;
   const width = (geometry.width ?? 6) * virtualToWorld;
   const rect = geometry.kind === 'rect' ? abilityRectRange(marker, map, geometry) : undefined;
@@ -213,9 +214,9 @@ export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = 
         x={-wallImageWidth / 2} y={-wallImageHeight / 2} width={wallImageWidth} height={wallImageHeight} />}
     </g>
     {!marker.visualState?.isIconHidden && <>
-      <rect x={-size / 2} y={-size / 2} width={size} height={size} rx={size * .3} fill="#17171d" stroke={teamColor(page, marker.isAlly)} strokeWidth="2" />
-      <image href={gameAsset(ability.icon)} x={-size / 2 + 4} y={-size / 2 + 4} width={size - 8} height={size - 8}
-        transform={glyphTransform} />
+      <rect x={-size} y={-size} width={size * 2} height={size * 2} fill="transparent" />
+      <image href={gameAsset(ability.icon)} x={-size / 2} y={-size / 2} width={size} height={size}
+        transform={glyphTransform} style={{ filter: `drop-shadow(0 0 1px ${teamColor(page, marker.isAlly)})` }} />
     </>}
   </>;
 }
@@ -346,6 +347,9 @@ export function CanvasObject({ item, collection, map, page, version, selected, a
   const upright = 'text' in item || 'aspectRatio' in item ? item : undefined;
   const pos = upright ? uprightPosition(upright, page, version) : worldMarker(item, collection, map, page, version);
   const box = upright && uprightDimensions(upright);
+  const isAbility = collection === 'abilityData';
+  const label = item.caption || (isAbility && 'data' in item ? abilityFor(item.data.type, item.data.index)?.name
+    : collection === 'agentData' ? agentById[(item as AgentMarker).type]?.name : undefined);
   let shape: ReactNode;
   switch (collection) {
     case 'agentData': shape = <AgentArt marker={item as AgentMarker} page={page} map={map} rotation={rotation} origin={pos} />; break;
@@ -356,9 +360,9 @@ export function CanvasObject({ item, collection, map, page, version, selected, a
   }
   return <g {...selection} ref={object} className={animate && !route ? 'animated-marker' : undefined}
     style={{ transform: `translate(${pos.dx}px, ${pos.dy}px)` }}>
-    <title>{item.caption || (collection === 'agentData' ? agentById[(item as AgentMarker).type]?.name : undefined) || ''}</title>
+    <title>{label}</title>
     {shape}
-    {showCaption && item.caption?.trim() && <foreignObject x={box ? box.dx - 8 : 14} y="-22" width="28" height="28"
+    {showCaption && !isAbility && item.caption?.trim() && <foreignObject x={box ? box.dx - 8 : 14} y="-22" width="28" height="28"
       pointerEvents={openCaption ? 'auto' : 'none'}>
       <button type="button" className="canvas-caption" tabIndex={openCaption ? 0 : -1} aria-label={t('查看标注')}
         onPointerDown={event => event.stopPropagation()} onClick={event => {
@@ -368,7 +372,8 @@ export function CanvasObject({ item, collection, map, page, version, selected, a
     </foreignObject>}
     {selected && (box ? <rect x="-3" y="-3" width={box.dx + 6} height={box.dy + 6}
       fill="none" stroke="#b69aff" strokeWidth="2.5" strokeDasharray="6 4" pointerEvents="none" />
-      : <circle r="30" fill="none" stroke="#b69aff" strokeWidth="2.5" strokeDasharray="6 4" pointerEvents="none" />)}
+      : <circle r={isAbility ? abilityIconSize(page) / Math.SQRT2 + 4 : 30} fill="none" stroke="#b69aff"
+        strokeWidth={isAbility ? 1.5 : 2.5} strokeDasharray={isAbility ? undefined : '6 4'} pointerEvents="none" />)}
   </g>;
 }
 
