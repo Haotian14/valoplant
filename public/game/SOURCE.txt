@@ -2,6 +2,9 @@ Map artwork, minimap labels, game icons and weapon icons reused from Icarus Stra
 The vision/ files reduce the SVG height model to planar edges. The elevation/
 files retain its wall height bands and supports, with ground sampled every
 two SVG units. The navigation/ files retain walkable polygons and portals.
+Each polygon's floor height is the mean of its source vertex heights, in
+centimetres. Traversal entries add map-specific rope, zipline, drop and teleporter
+connections between walkable polygons in canonical attack-side coordinates.
 https://github.com/SunkenInTime/icarus/tree/685586df4a0805adf6b403cd7fe4ce771d617d5e/assets
 
 Icarus copyright 2026 Dara Adedeji. See LICENSES/Apache-2.0.txt and NOTICE at the site root.
