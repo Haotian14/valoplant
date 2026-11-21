@@ -6,6 +6,32 @@ export const fitZoom = (zoom: number) => Math.min(8, Math.max(1, zoom));
 export const distance = (a: Point, b: Point) => Math.hypot(a.dx - b.dx, a.dy - b.dy);
 export const midpoint = (a: Point, b: Point): Point => ({ dx: (a.dx + b.dx) / 2, dy: (a.dy + b.dy) / 2 });
 
+type ScreenBounds = { left: number; top: number; right: number; bottom: number };
+
+export function placeBeside(anchor: ScreenBounds, viewport: ScreenBounds, size: { width: number; height: number }): Point {
+  const gap = 8;
+  const right = anchor.right + gap;
+  const left = anchor.left - gap - size.width;
+  const minX = viewport.left + gap;
+  const maxX = viewport.right - size.width - gap;
+  const minY = viewport.top + gap;
+  const maxY = viewport.bottom - size.height - gap;
+  if (right <= maxX || left >= minX) {
+    return {
+      dx: Math.max(minX, Math.min(maxX, right <= maxX ? right : left)),
+      dy: Math.max(minY, Math.min(maxY, anchor.top)),
+    };
+  }
+  const below = anchor.bottom + gap;
+  const above = anchor.top - gap - size.height;
+  const preferAbove = below > maxY && (above >= minY || anchor.top - viewport.top > viewport.bottom - anchor.bottom);
+  const center = (anchor.left + anchor.right - size.width) / 2;
+  return {
+    dx: Math.max(minX, Math.min(maxX, center)),
+    dy: Math.max(minY, Math.min(maxY, preferAbove ? above : below)),
+  };
+}
+
 export function zoomAt(camera: Camera, position: Point, factor: number): Camera {
   const zoom = fitZoom(camera.zoom * factor);
   const ratio = camera.zoom / zoom;

@@ -145,7 +145,8 @@ export function AgentArt({ marker, page, map, rotation, origin }: {
       sweep={Number(marker.presetType?.replace('viewCone', '')) || 90} color={color} rotation={rotation} elevation={marker.visionElevation} />}
     {marker.kind === 'circle' && <circle r={metersToWorld(marker.diameterMeters ?? 8, map) / 2}
       fill={cssColor(marker.colorValue, color)} fillOpacity={(marker.opacityPercent ?? 16) / 100} stroke={cssColor(marker.colorValue, color)} strokeWidth="2" />}
-    <rect x={-size / 2} y={-size / 2} width={size} height={size} rx={size * .23} fill="#19191f" stroke={color} strokeWidth="3" />
+    <rect data-agent-portrait="" x={-size / 2} y={-size / 2} width={size} height={size} rx={size * .23}
+      fill="#19191f" stroke={color} strokeWidth="3" />
     {agent ? <image href={gameAsset(agent.icon)} x={-size / 2 + 2} y={-size / 2 + 2} width={size - 4} height={size - 4}
       opacity={marker.state === 'dead' ? .45 : 1} />
       : <text className="svg-note" dominantBaseline="middle" textAnchor="middle">{marker.type.slice(0, 1).toUpperCase()}</text>}

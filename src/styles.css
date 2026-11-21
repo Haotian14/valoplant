@@ -374,6 +374,9 @@ img { display: block; max-width: 100%; }
 .context-menu button, .context-menu a { display: flex; width: 100%; align-items: center; gap: 8px; padding: 8px; text-align: left; background: none; color: var(--text); border: 0; border-radius: 5px; font-size: .85rem; text-decoration: none; }
 .context-menu button:hover, .context-menu a:hover { background: #392d4c; }
 .inspector { bottom: 58px; left: 12px; width: 196px; padding: 10px; }
+.agent-popover { left: var(--agent-popover-left, 8px); top: var(--agent-popover-top, 8px); max-width: var(--agent-popover-width, 100vw); }
+.context-menu:not(.card-menu).agent-popover { max-height: min(65dvh, 420px, var(--agent-popover-height, 100dvh)); }
+.inspector.agent-popover { position: fixed; bottom: auto; max-height: var(--agent-popover-height, 100dvh); overflow: auto; }
 .inspector-heading { display: flex; align-items: center; justify-content: space-between; font-size: .88rem; }
 .inspector-heading .icon-button { height: 25px; width: 25px; }
 .inspector .field { gap: 4px; margin: 7px 0; }

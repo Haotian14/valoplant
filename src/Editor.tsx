@@ -1,10 +1,11 @@
 import { displayPageName as pageName, t } from './locale.ts';
-import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
 import { ArrowDownToLine, ArrowLeft, ArrowUpRight, BookOpen, Check, ChevronDown, Circle, Copy, Crosshair, Eraser, Eye, Hand, ImagePlus, Save, Timer,
   Layers, MapPin, Minus, MousePointer2, Pencil, Play, Plus, Redo2, Search, Shield, Square, Swords,
   Trash2, Type, Undo2, X, Pause, ChevronLeft, ChevronRight, Route, Camera, Film, Settings,
 } from 'lucide-react';
 import Board, { drawingTools, type BoardViewport, type Brush, type Tool } from './Board.tsx';
+import { placeBeside } from './board-gestures.ts';
 import { objectForPlacement, usePlacementDrag, type Placement } from './placement.ts';
 import { type MapLayers } from './BoardArt.tsx';
 import { abilityFor, add, agentById, agents, cssColor, gameAsset, mapById, point, project, subtract, virtualToWorld, type Point } from './catalog.ts';
@@ -129,6 +130,9 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preferences, setPreferences] = useState(readPreferences);
   const viewport = useRef<BoardViewport>(null);
+  const canvasArea = useRef<HTMLElement>(null);
+  const contextPanel = useRef<HTMLDivElement>(null);
+  const inspectorPanel = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('');
   const [team, setTeam] = useState(true);
@@ -178,6 +182,39 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
   const activeAgent = agentId ? agentById[agentId] : undefined;
   const selected = selection.length === 1 ? selection[0] : undefined;
   const selectedItem = selected && page[selected.collection].find(item => item.id === selected.id);
+  const contextAgentId = context?.item.collection === 'agentData' ? context.item.id : undefined;
+  const inspectedAgentId = inspect && selected?.collection === 'agentData' ? selected.id : undefined;
+  const placeAgentPanels = useCallback(() => {
+    const bounds = canvasArea.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const area = { left: Math.max(0, bounds.left), top: Math.max(0, bounds.top),
+      right: Math.min(window.innerWidth, bounds.right), bottom: Math.min(window.innerHeight, bounds.bottom) };
+    const panels = [[contextPanel.current, contextAgentId], [inspectorPanel.current, inspectedAgentId]] as const;
+    for (const [panel, id] of panels) {
+      if (!panel || id === undefined) continue;
+      const anchor = viewport.current?.agentBounds(id);
+      if (!anchor) continue;
+      panel.style.setProperty('--agent-popover-width', `${Math.max(0, area.right - area.left - 16)}px`);
+      panel.style.setProperty('--agent-popover-height', `${Math.max(0, area.bottom - area.top - 16)}px`);
+      const { dx, dy } = placeBeside(anchor, area, panel.getBoundingClientRect());
+      panel.style.setProperty('--agent-popover-left', `${dx}px`);
+      panel.style.setProperty('--agent-popover-top', `${dy}px`);
+    }
+  }, [contextAgentId, inspectedAgentId]);
+
+  useLayoutEffect(() => {
+    if (contextAgentId === undefined && inspectedAgentId === undefined) return;
+    placeAgentPanels();
+    const observer = new ResizeObserver(placeAgentPanels);
+    if (canvasArea.current) observer.observe(canvasArea.current);
+    if (contextAgentId !== undefined && contextPanel.current) observer.observe(contextPanel.current);
+    if (inspectedAgentId !== undefined && inspectorPanel.current) observer.observe(inspectorPanel.current);
+    window.addEventListener('resize', placeAgentPanels);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', placeAgentPanels);
+    };
+  }, [contextAgentId, inspectedAgentId, placeAgentPanels]);
 
   useEffect(() => {
     if (preferences.autosave && lastSent.current !== strategy) {
@@ -826,7 +863,7 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
     </header>
 
     <div className="editor-body">
-      <section className="canvas-area">
+      <section className="canvas-area" ref={canvasArea}>
         <Board map={map} page={page} version={version} tool={tool} brush={brush} placement={placement}
           viewport={viewport} externalDrag={paletteDrag.preview} editingTextId={editingTextId}
           animate={animate} layers={layers} selection={selection} media={media}
@@ -846,7 +883,11 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
           }}
           hideAgents={false} onReadCaption={setCaptionRead} onHover={(item, screen) => { hovered.current = item && { item, screen }; }}
           onSelect={items => { setSelection(items); setContext(undefined); setClearMenu(false); if (items.length !== 1) setInspect(false); }}
-          onContext={(item, screen) => { setSelection([item]); setClearMenu(false); setContext({ item, screen }); }}
+          onContext={(item, screen) => {
+            setSelection([item]); setClearMenu(false); setContext({ item, screen });
+            if (item.collection === 'agentData') setInspect(false);
+          }}
+          onViewChange={contextAgentId !== undefined || inspectedAgentId !== undefined ? placeAgentPanels : undefined}
           onEdit={editItem} onDraw={drawing => editPage(p => append(p, 'drawingData', drawing))}
           onMove={moveSelections} onTransform={(target, patch) => editPage(p => patchItem(p, target.collection, target.id, patch))}
           onDoorToggle={door => editPage(p => toggleMapDoor(p, door, map, version))}
@@ -912,7 +953,8 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
               disabled={!lineupPlacement?.origin || !lineupPlacement.landing}>{t('下一步')}</button>)}
         </div>}
 
-        {inspect && selected && selectedItem && <div className="popover inspector">
+        {inspect && selected && selectedItem && <div ref={inspectorPanel}
+          className={`popover inspector${inspectedAgentId !== undefined ? ' agent-popover' : ''}`}>
           <div className="inspector-heading"><strong>{t('对象属性')}</strong><IconButton label={t('关闭属性')} onClick={() => setInspect(false)}><X size={15} /></IconButton></div>
           {'position' in selectedItem && <label className="field">{t('标注')}
             <input key={selected.id} defaultValue={selectedItem.caption ?? ''} onBlur={event => setItem({ caption: event.target.value })} />
@@ -1208,8 +1250,11 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
 
     {context && <>
       <div className="context-backdrop" onPointerDown={() => setContext(undefined)} />
-      <div className="popover context-menu" style={{ left: Math.max(4, Math.min(context.screen.dx, window.innerWidth - 188)),
-        top: Math.max(4, Math.min(context.screen.dy, window.innerHeight - Math.min(window.innerHeight * .65, 420) - 8)) }}>
+      <div ref={contextPanel} className={`popover context-menu${contextAgentId !== undefined ? ' agent-popover' : ''}`}
+        style={contextAgentId === undefined ? {
+          left: Math.max(4, Math.min(context.screen.dx, window.innerWidth - 188)),
+          top: Math.max(4, Math.min(context.screen.dy, window.innerHeight - Math.min(window.innerHeight * .65, 420) - 8)),
+        } : undefined}>
         <button type="button" onClick={() => { setInspect(true); setContext(undefined); }}><Pencil size={15} />{t('编辑属性')}</button>
         {contextItem && context.item.collection === 'agentData' && 'type' in contextItem &&
           <button type="button" onClick={() => { setAgentId(contextItem.type); setPanelOpen(true); setContext(undefined); }}>

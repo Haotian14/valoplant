@@ -1,5 +1,5 @@
 import { t } from './locale.ts';
-import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type Ref } from 'react';
+import { Fragment, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type Ref } from 'react';
 import { Crosshair, Minus, Plus } from 'lucide-react';
 import { distance, fitZoom, midpoint, pinchCamera, zoomAt } from './board-gestures.ts';
 import { objectForPlacement, type Placement, type PlacementPreview } from './placement.ts';
@@ -60,6 +60,7 @@ type Gesture =
 export type BoardViewport = {
   center: () => Point;
   pointAt: (screen: Point) => Point | undefined;
+  agentBounds: (id: string) => DOMRect | undefined;
 };
 
 type Props = {
@@ -74,6 +75,7 @@ type Props = {
   onSelect: (items: CanvasSelection[]) => void;
   onContext: (item: CanvasSelection, screen: Point) => void;
   onEdit: (item: CanvasSelection) => void;
+  onViewChange?: () => void;
   onReadCaption: (caption: string) => void;
   onTextChange: (id: string, text: string | undefined) => void;
   onDismissAbilities: () => void;
@@ -175,7 +177,13 @@ export default function Board(props: Props) {
   useImperativeHandle(props.viewport, () => ({
     center: () => point(camera.x, camera.y),
     pointAt,
+    agentBounds: id => root.current?.querySelector(
+      `[data-collection="agentData"][data-object-id="${CSS.escape(id)}"] [data-agent-portrait]`,
+    )?.getBoundingClientRect(),
   }));
+
+  const { onViewChange } = props;
+  useLayoutEffect(() => { onViewChange?.(); }, [onViewChange, left, top, width, height, attack, page.agentData, movePreview]);
 
   function clearGesture() {
     gesture.current = null;
