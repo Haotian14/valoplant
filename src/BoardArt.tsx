@@ -18,8 +18,9 @@ import { formattedLines, textLinks, type FormattedPart } from './text-content.ts
 
 const allyColor = '#57d0ac';
 const enemyColor = '#f17587';
+const neutralTeamColor = '#dfd9e7';
 const tone = (ally?: boolean) => ally === false ? enemyColor : allyColor;
-const teamColor = (page: Page, ally?: boolean) => page.settings.useNeutralTeamColors === true ? '#dfd9e7' : tone(ally);
+const teamColor = (page: Page, ally?: boolean) => page.settings.useNeutralTeamColors === true ? neutralTeamColor : tone(ally);
 const degrees = (value: number) => value * 180 / Math.PI;
 const abilityIconSize = (page: Page) => (page.settings.abilitySize ?? 25) * virtualToWorld / 2;
 
@@ -175,10 +176,14 @@ export function AgentArt({ marker, page, map, rotation, origin }: {
 export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = true }: {
   marker: AbilityMarker; page: Page; map: MapInfo; rotation: number; origin: Point; rotateGlyph?: boolean;
 }) {
+  const neutral = page.settings.useNeutralTeamColors === true;
+  const markerColor = neutral ? neutralTeamColor : marker.isAlly === false ? '#ff4f62' : '#4da6ff';
   const ability = abilityFor(marker.data.type, marker.data.index);
-  if (!ability) return <circle r={12} fill={teamColor(page, marker.isAlly)} />;
+  if (!ability) return <circle r={12} fill={markerColor} />;
   const geometry = abilityGeometry(ability, map.id);
-  const color = cssColor(geometry.color, teamColor(page, marker.isAlly));
+  const color = neutral ? cssColor(geometry.color, markerColor) : markerColor;
+  const teamShadow = `drop-shadow(0 0 1px ${markerColor})`;
+  const rangeImageStyle = neutral ? undefined : { filter: teamShadow };
   const size = abilityIconSize(page);
   const radius = (geometry.diameter ?? 0) * virtualToWorld / 2;
   const width = (geometry.width ?? 6) * virtualToWorld;
@@ -220,23 +225,23 @@ export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = 
           : <rect x={-width / 2} y={-rect.forward} width={width} height={rect.height} rx="2"
             fill={fill ? color : 'none'} fillOpacity=".22" stroke={fill ? stroke : inactive ? color : 'none'}
             strokeDasharray={inactive ? '6 4' : undefined} strokeWidth="2.5" />)}
-        {geometry.kind === 'image' && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)}
+        {geometry.kind === 'image' && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)} style={rangeImageStyle}
           x={-(radius || geometry.bounds[0] * virtualToWorld / 2)} y={-(radius || geometry.bounds[1] * virtualToWorld / 2)}
           width={radius ? radius * 2 : geometry.bounds[0] * virtualToWorld} height={radius ? radius * 2 : geometry.bounds[1] * virtualToWorld} />}
         {geometry.kind === 'image' && inactive && <circle r={radius || geometry.bounds[0] * virtualToWorld / 2}
-          fill="none" stroke="#76efbb" strokeWidth="2" strokeDasharray="6 4" />}
+          fill="none" stroke={neutral ? '#76efbb' : color} strokeWidth="2" strokeDasharray="6 4" />}
       </g>
       {geometry.kind === 'mesh' && fill && barrierMeshAxes.map((axis, index) => {
         const length = meshArmLength(marker.armLengthsMeters?.[index]) * worldPerMeter(map);
         return <line key={index} x1={0} y1={0} x2={axis.dx * length} y2={axis.dy * length} stroke={color} strokeWidth="5" />;
       })}
-      {wallImageHeight > 0 && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)}
+      {wallImageHeight > 0 && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)} style={rangeImageStyle}
         x={-wallImageWidth / 2} y={-wallImageHeight / 2} width={wallImageWidth} height={wallImageHeight} />}
     </g>
     {!marker.visualState?.isIconHidden && <>
       <rect x={-size} y={-size} width={size * 2} height={size * 2} fill="transparent" />
       <image href={gameAsset(ability.icon)} x={-size / 2} y={-size / 2} width={size} height={size}
-        transform={glyphTransform} style={{ filter: `drop-shadow(0 0 1px ${teamColor(page, marker.isAlly)})` }} />
+        transform={glyphTransform} style={{ filter: neutral ? teamShadow : `${teamShadow} ${teamShadow}` }} />
     </>}
   </>;
 }
