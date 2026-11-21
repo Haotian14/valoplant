@@ -148,9 +148,11 @@ export default function Board(props: Props) {
   const handleItem = single && page[single.collection].find(item => item.id === single.id);
   const frame = single && handleItem && (!props.hideAgents || single.collection !== 'agentData')
     ? { item: handleItem, collection: single.collection, page, map, version } : undefined;
-  const handles = frame && !movePreview ? objectHandles({
-    ...frame, item: transformPreview ? { ...frame.item, ...transformPreview.patch } : frame.item,
-  }, unitsPerPixel * 13) : [];
+  const handleGap = unitsPerPixel * 13;
+  const handles = frame && !movePreview ? objectHandles(frame, handleGap,
+    ({ dx, dy }) => dx >= left + handleGap && dx <= left + width - handleGap &&
+      dy >= top + handleGap && dy <= top + height - handleGap,
+    transformPreview?.patch) : [];
 
   function handleAt(target: EventTarget | null) {
     const index = target instanceof Element ? target.getAttribute('data-object-handle') : null;

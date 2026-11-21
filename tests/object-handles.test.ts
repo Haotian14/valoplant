@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { add, mapById, point } from '../src/catalog.ts';
+import { abilityFor, abilityGeometry, add, mapById, point, project, virtualToWorld } from '../src/catalog.ts';
 import { abilityLengthRange, makeAbility, makeUtility, metersToWorld, uprightPosition } from '../src/geometry.ts';
 import { objectHandles, transformObject } from '../src/object-handles.ts';
 import { newPage, type ImageMarker, type Utility } from '../src/strategy.ts';
@@ -43,6 +43,40 @@ test('a scalable skill stores unscaled length when dragged on a scaled map', () 
 
   assert.equal(range.length, 46.24);
   assert.ok(Math.abs(patch.length - (range.min + 50)) < 1e-9);
+});
+
+test('fixed-length skills rotate from their range tip around a stationary cast point', () => {
+  const center = point(500, 400);
+  const gap = 13;
+  for (const [type, index] of [['omen', 1], ['fade', 3]] as const) {
+    const { height } = abilityGeometry(abilityFor(type, index)!, map.id);
+    const distance = height! * virtualToWorld + gap;
+    for (const attack of [true, false]) {
+      const page = attack ? newPage(0) : defense;
+      const item = { ...makeAbility(type, index, project(center, attack), true, map, attack), rotation: undefined };
+      const frame = { item, collection: 'abilityData', map, page, version } as const;
+      const [handle] = objectHandles(frame, gap);
+      const direction = attack ? 1 : -1;
+
+      assert.equal(handle.mode, 'rotate');
+      assert.ok(Math.hypot(handle.position.dx - center.dx, handle.position.dy - center.dy + direction * distance) < 1e-9);
+      const patch = transformObject(frame, handle, handle.position, add(center, point(direction * distance, 0)), false);
+      assert.deepEqual(Object.keys(patch), ['rotation']);
+      assert.ok('rotation' in patch && Math.abs((patch.rotation ?? NaN) - Math.PI / 2) < 1e-9);
+    }
+  }
+});
+
+test('Paranoia keeps a rotation handle near its marker when the range tip is offscreen', () => {
+  const center = point(500, 100);
+  const item = makeAbility('omen', 1, center, true, map, true);
+  const frame = { item, collection: 'abilityData', map, page: newPage(0), version } as const;
+  const isVisible = ({ dy }: typeof center) => dy >= 0;
+  const [handle] = objectHandles(frame, 13, isVisible);
+  const [preview] = objectHandles(frame, 13, isVisible, { rotation: Math.PI / 2 });
+
+  assert.deepEqual(handle.position, add(center, point(0, -39)));
+  assert.deepEqual(preview.position, add(center, point(39, 0)));
 });
 
 test('a bend pulled from a wall segment respects the saved orientation and maximum length', () => {

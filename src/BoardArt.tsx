@@ -5,7 +5,7 @@ import {
   abilityFor, abilityGeometry, agentById, cssColor, gameAsset, mapArtworkFrame, project, virtualToWorld, worldWidth,
   type MapInfo, type Point,
 } from './catalog.ts';
-import { abilityLengthRange, abilityVision, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, sectorPath,
+import { abilityRectRange, abilityVision, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, sectorPath,
   uprightDimensions, uprightPosition, uprightScale, usesInactiveTrace, worldMarker } from './geometry.ts';
 import { drawingPoints, type AbilityMarker, type AgentMarker, type CanvasItem, type CanvasSelection, type Collection,
   type Drawing, type ImageMarker, type LineupLink, type Page, type TextMarker, type Utility } from './strategy.ts';
@@ -166,9 +166,7 @@ export function AbilityArt({ marker, page, map, rotation, origin }: { marker: Ab
   const size = (page.settings.abilitySize ?? 25) * virtualToWorld;
   const radius = (geometry.diameter ?? 0) * virtualToWorld / 2;
   const width = (geometry.width ?? 6) * virtualToWorld;
-  const variable = abilityLengthRange(marker, map);
-  const height = variable ? variable.length * variable.displayScale : (marker.length || geometry.height || 60) * virtualToWorld;
-  const anchorY = geometry.anchor[1] * virtualToWorld;
+  const rect = geometry.kind === 'rect' ? abilityRectRange(marker, map, geometry) : undefined;
   const visibility = marker.visualState;
   const fill = visibility?.showRangeFill !== false;
   const inactive = !fill && usesInactiveTrace(marker);
@@ -188,7 +186,7 @@ export function AbilityArt({ marker, page, map, rotation, origin }: { marker: Ab
         fill={visibility?.showInnerFill !== false ? color : 'none'} fillOpacity=".1" stroke={innerStroke} strokeWidth="1.6" strokeDasharray="6 4" />}
       {geometry.kind === 'sector' && <path d={sectorPath(radius, geometry.sweep ?? 90)}
         fill={fill ? color : 'none'} fillOpacity=".16" stroke={stroke} strokeWidth="2" />}
-      {geometry.kind === 'rect' && <rect x={-width / 2} y={-Math.min(height, anchorY || height)} width={width} height={height} rx="2"
+      {rect && <rect x={-width / 2} y={-rect.forward} width={width} height={rect.height} rx="2"
         fill={fill ? color : 'none'} fillOpacity=".22" stroke={fill ? stroke : inactive ? color : 'none'}
         strokeDasharray={inactive ? '6 4' : undefined} strokeWidth="2.5" />}
       {geometry.kind === 'mesh' && fill && barrierMeshAxes.map((axis, index) => {

@@ -1,7 +1,7 @@
 import { draggedAngle, draggedEdge, rotatedVector } from './board-gestures.ts';
 import { abilityFor, abilityGeometry, add, point, project, subtract, virtualToWorld, type MapInfo, type Point } from './catalog.ts';
 import {
-  abilityLengthRange, abilityVision, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, pinnedUprightPosition, uprightDimensions, uprightPosition, uprightScale,
+  abilityLengthRange, abilityRectRange, abilityVision, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, pinnedUprightPosition, uprightDimensions, uprightPosition, uprightScale,
   withMarkerCenter, worldMarker,
 } from './geometry.ts';
 import type { CanvasItem, Collection, Page, Utility } from './strategy.ts';
@@ -51,7 +51,11 @@ const rectAxis = (mode: HandleMode) => {
   }
 };
 
-export function objectHandles({ item, collection, page, map, version }: ObjectFrame, gap: number): ObjectHandle[] {
+export function objectHandles(
+  { item: savedItem, collection, page, map, version }: ObjectFrame,
+  gap: number, isVisible?: (position: Point) => boolean, preview?: Partial<CanvasItem>,
+): ObjectHandle[] {
+  const item = preview ? { ...savedItem, ...preview } : savedItem;
   if (!('position' in item) || item.isDeleted) return [];
   if ('aspectRatio' in item || 'text' in item) {
     const size = uprightDimensions(item);
@@ -59,7 +63,8 @@ export function objectHandles({ item, collection, page, map, version }: ObjectFr
   }
 
   const center = worldMarker(item, collection, map, page, version);
-  if ('data' in item && markerAbility(item, map)?.kind === 'wall') {
+  const ability = markerAbility(item, map);
+  if ('data' in item && ability?.kind === 'wall') {
     const path = savedWallPath(item, map);
     const attack = pageIsAttack(page);
     const screen = (offset: Point) => add(center, attack ? offset : point(-offset.dx, -offset.dy));
@@ -70,14 +75,14 @@ export function objectHandles({ item, collection, page, map, version }: ObjectFr
         ({ mode: 'wallPoint', index, position: screen(offset), label: path.length > 1 ? '拖动拐点 · 右键移除' : '拖动墙端点' })),
     ];
   }
-  const canonical = canonicalMarkers(page, version);
-  const angle = objectRotation(item) + (canonical ? 0 : Math.PI);
+  const sideAngle = canonicalMarkers(page, version) ? 0 : Math.PI;
+  const angle = objectRotation(item) + sideAngle;
   const handles: ObjectHandle[] = [];
   function addHandle(mode: HandleMode, offset: Point, label: string) {
     handles.push({ mode, position: add(center, rotatedVector(offset, angle)), label });
   }
 
-  if ('data' in item && markerAbility(item, map)?.kind === 'mesh' && item.visualState?.showRangeFill !== false) {
+  if ('data' in item && ability?.kind === 'mesh' && item.visualState?.showRangeFill !== false) {
     const lengths = item.armLengthsMeters;
     barrierMeshAxes.forEach((axis, index) => {
       const length = metersToWorld(meshArmLength(lengths?.[index]), map);
@@ -105,7 +110,13 @@ export function objectHandles({ item, collection, page, map, version }: ObjectFr
   const lengthHandle = length ? Math.max(gap * 2, length.length * length.displayScale) : 0;
   if (length) addHandle('length', point(0, -lengthHandle), '调整作用距离');
   if (canRotate(item, map)) {
-    const radius = length ? lengthHandle + gap * 2 : gap * 3;
+    let radius = length ? lengthHandle + gap * 2 : gap * 3;
+    if (!length && ability?.kind === 'rect' && 'data' in item) {
+      const tip = Math.max(radius, abilityRectRange(item, map, ability).forward + gap);
+      // Keep the same handle distance from the cast point throughout the drag.
+      const position = add(center, rotatedVector(point(0, -tip), objectRotation(savedItem) + sideAngle));
+      if (!isVisible || isVisible(position)) radius = tip;
+    }
     addHandle('rotate', point(0, -radius), '旋转方向');
   }
   return handles;

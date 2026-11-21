@@ -323,11 +323,13 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
       return;
     }
     editPage(p => append(p, collection, item));
-    if (marker.kind === 'text') {
-      setEditingTextId(item.id);
+    const directionalAbility = marker.kind === 'ability' && canRotate(item, map);
+    if (tool === 'place' || directionalAbility) activate('select');
+    if (directionalAbility) hovered.current = undefined;
+    if (marker.kind === 'text') setEditingTextId(item.id);
+    if (marker.kind === 'text' || directionalAbility) {
       setSelection([{ collection, id: item.id }]);
     }
-    if (tool === 'place') activate('select');
   }
 
   function placeAtCenter(marker: Placement) {
@@ -517,11 +519,13 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
         else setClearMenu(value => !value);
       }
       if (key === 'x') {
-        const target = hovered.current?.item;
-        const marker = target && page[target.collection].find(row => row.id === target.id);
-        if (target && marker && canRotate(marker, map)) {
+        for (const target of [hovered.current?.item, selected]) {
+          if (!target) continue;
+          const marker = page[target.collection].find(row => row.id === target.id);
+          if (!marker || !('position' in marker) || marker.isDeleted || !canRotate(marker, map)) continue;
           const rotation = steppedRotation('rotation' in marker ? marker.rotation ?? 0 : 0, !event.shiftKey);
           editPage(p => patchItem(p, target.collection, target.id, { rotation }));
+          break;
         }
       }
       if (key === 'delete' || key === 'backspace') {
@@ -948,7 +952,11 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
           {canRotate(selectedItem, map) &&
             <label className="field">{t('旋转角度')}
               <input type="number" step="15" key={`${selected.id}-${'rotation' in selectedItem ? selectedItem.rotation : 0}`} defaultValue={Math.round(('rotation' in selectedItem ? selectedItem.rotation ?? 0 : 0) * (180 / Math.PI))}
-                onBlur={event => event.target.value !== '' && setItem({ rotation: Number(event.target.value) * Math.PI / 180 })} />
+                onBlur={event => {
+                  const input = event.currentTarget;
+                  const angle = input.valueAsNumber;
+                  if (Number.isFinite(angle) && angle !== Number(input.defaultValue)) setItem({ rotation: angle * Math.PI / 180 });
+                }} onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }} />
             </label>}
           {selected.collection === 'utilityData' && 'customDiameter' in selectedItem && <label className="field">{t('直径（米）')}
             <input type="number" min="1" max="110" key={`${selected.id}-${selectedItem.customDiameter}-diameter`} defaultValue={selectedItem.customDiameter ?? 10}

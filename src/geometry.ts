@@ -1,5 +1,5 @@
 import {
-  abilityFor, abilityGeometry, add, point, project, subtract, virtualToWorld, type MapInfo, type Point,
+  abilityFor, abilityGeometry, add, point, project, subtract, virtualToWorld, type AbilityGeometry, type MapInfo, type Point,
 } from './catalog.ts';
 import { append, appendLineup, type AbilityMarker, type AgentMarker, type CanvasItem, type CanvasSelection,
   type Collection, type ImageMarker, type Page, type TextMarker, type Utility } from './strategy.ts';
@@ -23,6 +23,12 @@ export function abilityLengthRange(marker: AbilityMarker, map: MapInfo) {
   const length = Math.min(max, Math.max(min, raw));
   const mapLength = abilityGeometry(ability, map.id).height ?? max * map.scale;
   return { length, min, max, displayScale: mapLength * virtualToWorld / max };
+}
+
+export function abilityRectRange(marker: AbilityMarker, map: MapInfo, geometry: AbilityGeometry) {
+  const variable = abilityLengthRange(marker, map);
+  const height = variable ? variable.length * variable.displayScale : (marker.length || geometry.height || 60) * virtualToWorld;
+  return { height, forward: Math.min(height, geometry.anchor[1] * virtualToWorld || height) };
 }
 
 export function abilityVision(marker: AbilityMarker, map: MapInfo) {
