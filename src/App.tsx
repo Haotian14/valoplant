@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
-import { ArrowDownToLine, ArrowUpRight, BookOpen, ChevronDown, CircleHelp, CloudDownload, FolderOpen,
+import { ArrowDownToLine, ArrowUpRight, BookOpen, ChevronDown, CircleHelp, FolderOpen,
   LayoutGrid, List, Map as MapIcon, MapPin, MoreHorizontal, Plus, RefreshCw, Search, Trash2, Upload, Users, X, Play, Eye,
 } from 'lucide-react';
 import Editor from './Editor.tsx';
@@ -125,22 +125,17 @@ export default function App() {
     notify(draft ? '画面已追加到战术最后一页' : '已保存为本地战术');
   }
 
-  async function openTeam(entry: Entry, preview = false) {
+  async function openTeam(entry: Entry) {
     if (opening) return;
     setOpening(entryKey(entry));
     try {
       if (!mapById[entry.map]) throw new Error(`暂不支持地图 ${entry.map}`);
-      const existing = drafts.find(row => row.published?.path === publishedPath(entry) &&
-        row.published.revision === entry.revision && row.published.importedAt === row.updated);
-      if (existing) { (preview ? setViewing : setActive)(existing); return; }
       const path = ['files', entry.revision, ...entry.path].map(encodeURIComponent).join('/');
       const response = await fetch(catalogUrl + path, { signal: AbortSignal.timeout(30_000) });
       if (!response.ok) throw new Error('战术文件读取失败，刷新团队列表后重试');
       const strategy = importIca(new Uint8Array(await response.arrayBuffer()), entry.path.at(-1)!);
       if (!mapById[strategy.document.mapData]) throw new Error(`暂不支持地图 ${strategy.document.mapData}`);
-      const source = { ...strategy, published: { path: publishedPath(entry), revision: entry.revision, importedAt: strategy.updated } };
-      if (preview) setViewing(source);
-      else startDraft(source);
+      setViewing(strategy);
     } catch (error) {
       notify(error instanceof Error ? error.message : '无法打开团队战术');
     } finally {
@@ -280,9 +275,13 @@ export default function App() {
   return <>
     {showReplays ? <Suspense fallback={<p className="loading">{t('正在打开回放库…')}</p>}>
       <ReplayLibrary close={() => setShowReplays(false)} drafts={drafts} capture={captureReplay} />
-    </Suspense> : viewing ? <StrategyViewer key={viewing.id} strategy={viewing} close={() => setViewing(undefined)} editCopy={() => {
+    </Suspense> : viewing ? <StrategyViewer key={viewing.id} strategy={viewing} close={() => setViewing(undefined)} saveLocalCopy={() => {
+      const now = Date.now();
+      changeTab('drafts');
+      setLocalFolder(undefined);
+      setQuery('');
       setViewing(undefined);
-      startDraft(viewing);
+      startDraft({ ...viewing, updated: now, createdAt: now });
     }} /> : active ? <Editor key={active.id} initial={active} save={store} exit={() => setActive(undefined)} onSwitch={() => setSwitchDraft(true)}
       notify={notify} saving={saving[active.id] ?? 'saved'} />
       : <main className="library"
@@ -369,7 +368,7 @@ export default function App() {
           {hasItems && <div className={`strategy-list strategy-${layout}`}>
             {tab === 'team' ? teamItems.map(entry => <StrategyCard key={entryKey(entry)}
               name={entry.name} map={entry.map} roster={entry.roster} detail={entry.path.slice(0, -1).join(' / ') || t('团队战术')}
-              disabled={!!opening} opening={opening === entryKey(entry)} onOpen={() => openTeam(entry)} onPreview={() => openTeam(entry, true)} />)
+              disabled={!!opening} opening={opening === entryKey(entry)} onOpen={() => openTeam(entry)} />)
               : <>
                 {visibleFolders.map(folder => <article className="strategy-card library-folder" key={folder.id} draggable
                   onDragStart={event => event.dataTransfer.setData('application/x-playbook-folder', folder.id)}
@@ -393,7 +392,7 @@ export default function App() {
                 onPin={() => { store({ ...strategy, pinned: !strategy.pinned }); setSelectedMenu(''); }}
                 onDuplicate={() => {
                   const now = Date.now();
-                  store({ ...strategy, id: newId(), name: `${strategy.name} 副本`, updated: now, createdAt: now, published: undefined, pinned: false });
+                  store({ ...strategy, id: newId(), name: `${strategy.name} 副本`, updated: now, createdAt: now, pinned: false });
                   setSelectedMenu('');
                   notify('已复制战术');
                 }}
@@ -433,7 +432,7 @@ export default function App() {
             <li>{t('把 .ica 放进 GitHub 仓库的')}{' '} <code>strategies/</code> {' '}{t('并提交。')}</li>
             <li>{t('GitHub Pages 部署完成后，刷新团队战术库。')}</li>
           </ol>
-          <p className="muted">{t('打开团队战术会创建本地副本。编辑后的版本可以再次导出。')}</p>
+          <p className="muted">{t('团队战术可直接查看。需要修改时，点击「另存到本地并编辑」。')}</p>
         </Modal>}
       </main>}
     {editFolder && <Modal title={localFolders.some(row => row.id === editFolder.id) ? t('编辑文件夹') : t('新建文件夹')}
@@ -499,10 +498,10 @@ export default function App() {
   </>;
 }
 
-function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu, pinned, dragId, onMenu, onExport, onRename, onMove, onPin, onDuplicate, onRemove, onOpen, onPreview }:
+function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu, pinned, dragId, onMenu, onExport, onRename, onMove, onPin, onDuplicate, onRemove, onOpen }:
   { name: string; map: string; detail: string; roster?: string[]; disabled?: boolean; opening?: boolean; menu?: boolean;
     pinned?: boolean; dragId?: string; onRename?: () => void; onMove?: () => void; onPin?: () => void;
-    onMenu?: () => void; onExport?: () => void; onDuplicate?: () => void; onRemove?: () => void; onOpen: () => void; onPreview?: () => void; }) {
+    onMenu?: () => void; onExport?: () => void; onDuplicate?: () => void; onRemove?: () => void; onOpen: () => void; }) {
   const agents = roster.filter(id => Object.hasOwn(agentById, id)).map(id => agentById[id]);
   const portraits = agents.slice(0, 5);
   const extra = agents.slice(portraits.length);
@@ -520,12 +519,9 @@ function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu,
       </span>
       <span className="strategy-info">
         <span><strong>{pinned && '★ '}{name}</strong><small>{opening ? t('正在打开…') : detail}</small></span>
-        {!onMenu && !onPreview && <CloudDownload size={17} />}
+        {!onMenu && <Eye size={17} />}
       </span>
     </button>
-    {onPreview && <div className="strategy-more">
-      <IconButton label={`只读浏览 ${name}`} disabled={disabled} onClick={onPreview}><Eye size={18} /></IconButton>
-    </div>}
     {onMenu && <div className="strategy-more">
       <IconButton label={`${name} 的操作`} aria-expanded={!!menu} onClick={onMenu}><MoreHorizontal size={19} /></IconButton>
       {menu && <div className="popover context-menu card-menu">

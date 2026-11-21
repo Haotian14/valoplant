@@ -4,6 +4,7 @@ import type { LibraryFolder } from './library-backup.ts';
 const storeName = 'strategies';
 const folderStore = 'folders';
 const replayStore = 'replays';
+type StoredStrategy = Strategy & { published?: { importedAt: number } };
 export type SavedReplay = { id: string; name: string; blob: Blob; map: string };
 
 function openLibrary(): Promise<IDBDatabase> {
@@ -43,7 +44,15 @@ async function transaction<T>(mode: IDBTransactionMode, action: (store: IDBObjec
   });
 }
 
-export const loadDrafts = () => transaction<Strategy[]>('readonly', store => store.getAll());
+export async function loadDrafts() {
+  const rows = await transaction<StoredStrategy[]>('readonly', store => store.getAll());
+  // Earlier versions saved a copy whenever a team strategy was opened.
+  return rows.flatMap(({ published, ...draft }) => {
+    if (published?.importedAt === draft.updated && !draft.pinned && !draft.folderId) return [];
+    return [draft];
+  });
+}
+
 export const saveDraft = (strategy: Strategy) => transaction('readwrite', store => store.put(strategy));
 export const deleteDraft = (id: string) => transaction('readwrite', store => store.delete(id));
 export const loadFolders = () => transaction<LibraryFolder[]>('readonly', store => store.getAll(), folderStore);

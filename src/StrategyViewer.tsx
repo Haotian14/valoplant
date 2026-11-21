@@ -11,8 +11,8 @@ import { IconButton, Modal } from './ui.tsx';
 const ignore = () => {};
 const brush = { color: '#eeeaf8', width: 5, dotted: false, arrow: false, timing: false, speed: 'running' };
 
-export default function StrategyViewer({ strategy, close, editCopy }: {
-  strategy: Strategy; close: () => void; editCopy: () => void;
+export default function StrategyViewer({ strategy, close, saveLocalCopy }: {
+  strategy: Strategy; close: () => void; saveLocalCopy: () => void;
 }) {
   const [index, setIndex] = useState(0);
   const [caption, setCaption] = useState<string>();
@@ -39,7 +39,7 @@ export default function StrategyViewer({ strategy, close, editCopy }: {
     <header className="editor-header">
       <IconButton label={t('返回战术库')} onClick={close}><ArrowLeft size={20} /></IconButton>
       <strong title={strategy.name}>{strategy.name}</strong>
-      <button className="button subtle" type="button" onClick={editCopy}><Copy size={15} />{t('编辑副本')}</button>
+      <button className="button subtle" type="button" onClick={saveLocalCopy}><Copy size={15} />{t('另存到本地并编辑')}</button>
     </header>
     <div className="canvas-area">
       <Board readOnly map={map} page={page} version={Number(strategy.document.versionNumber)} tool="hand"

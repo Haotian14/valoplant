@@ -47,7 +47,6 @@ export type Document = { versionNumber: string; mapData: string; pages: Page[]; 
 export type Strategy = {
   id: string; name: string; updated: number; document: Document; media: Record<string, Uint8Array>;
   createdAt?: number; folderId?: string; pinned?: boolean;
-  published?: { path: string; revision: string; importedAt: number };
 };
 
 export const drawingCollections = ['agentData', 'abilityData', 'drawingData', 'textData', 'imageData', 'utilityData'] as const;
