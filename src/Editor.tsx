@@ -5,13 +5,13 @@ import { ArrowDownToLine, ArrowLeft, ArrowUpRight, BookOpen, Check, ChevronDown,
   Trash2, Type, Undo2, X, Pause, ChevronLeft, ChevronRight, Route, Camera, Film, Settings,
 } from 'lucide-react';
 import Board, { drawingTools, type BoardViewport, type Brush, type Tool } from './Board.tsx';
-import { steppedRotation } from './board-gestures.ts';
 import { objectForPlacement, usePlacementDrag, type Placement } from './placement.ts';
 import { type MapLayers } from './BoardArt.tsx';
 import { abilityFor, add, agentById, agents, cssColor, gameAsset, mapById, point, project, subtract, virtualToWorld, type Point } from './catalog.ts';
-import { abilityVision, anchorFor, canonicalMarkers, copyToPage, drawingColor, flipPage, metersToWorld, pageIsAttack, pinnedUprightPosition, usesInactiveTrace, worldMarker } from './geometry.ts';
+import { abilityVision, anchorFor, canonicalMarkers, copyToPage, drawingColor, flipPage, hasCircleRangeFill, markerAbility,
+  metersToWorld, pageIsAttack, pinnedUprightPosition, usesInactiveTrace, worldMarker } from './geometry.ts';
 import { weapons, weaponName } from './weapons.ts';
-import { canRotate, markerAbility } from './object-handles.ts';
+import { canRotate, canRotateRange, stepObjectRotation } from './object-handles.ts';
 import { changedMapDoors, findMapDoor, toggleMapDoor } from './map-doors.ts';
 import { loadSightWalls, sightDoorWalls, sightPolygon } from './map-vision.ts';
 import { elevationsAt, loadHeightModel, resolvedElevation, wallsAtElevation, type ElevationChoice } from './height-vision.ts';
@@ -323,7 +323,7 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
       return;
     }
     editPage(p => append(p, collection, item));
-    const directionalAbility = marker.kind === 'ability' && canRotate(item, map);
+    const directionalAbility = marker.kind === 'ability' && canRotateRange(item, map);
     if (tool === 'place' || directionalAbility) activate('select');
     if (directionalAbility) hovered.current = undefined;
     if (marker.kind === 'text') setEditingTextId(item.id);
@@ -523,7 +523,7 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
           if (!target) continue;
           const marker = page[target.collection].find(row => row.id === target.id);
           if (!marker || !('position' in marker) || marker.isDeleted || !canRotate(marker, map)) continue;
-          const rotation = steppedRotation('rotation' in marker ? marker.rotation ?? 0 : 0, !event.shiftKey);
+          const rotation = stepObjectRotation(marker, map, canonicalMarkers(page, version), !event.shiftKey);
           editPage(p => patchItem(p, target.collection, target.id, { rotation }));
           break;
         }
@@ -793,7 +793,8 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
   const rangeToggles: { key: keyof NonNullable<AbilityMarker['visualState']>; label: string }[] = [];
   if (abilityShape) {
     if (['circle', 'sector'].includes(abilityShape.kind)) rangeToggles.push({ key: 'showRangeOutline', label: '范围轮廓' });
-    if (['circle', 'sector', 'rect', 'mesh', 'image'].includes(abilityShape.kind)) rangeToggles.push({
+    if (['sector', 'rect', 'mesh', 'image', 'rotatableImage'].includes(abilityShape.kind) ||
+        abilityShape.kind === 'circle' && hasCircleRangeFill(abilityShape)) rangeToggles.push({
       key: 'showRangeFill', label: contextItem && 'data' in contextItem && usesInactiveTrace(contextItem) ? '技能激活' : '技能范围',
     });
     if (contextItem && 'data' in contextItem && abilityVision(contextItem, map)) rangeToggles.push({ key: 'showVisionCone', label: '技能视野' });

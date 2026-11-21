@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { abilityFor, abilityGeometry, add, mapById, point, project, virtualToWorld } from '../src/catalog.ts';
-import { abilityLengthRange, makeAbility, makeUtility, metersToWorld, uprightPosition } from '../src/geometry.ts';
-import { objectHandles, transformObject } from '../src/object-handles.ts';
+import { abilityLengthRange, abilityRectRange, flipPage, hasCircleRangeFill, makeAbility, makeUtility, metersToWorld, uprightPosition } from '../src/geometry.ts';
+import { canRotate, objectHandles, stepObjectRotation, transformObject } from '../src/object-handles.ts';
 import { newPage, type ImageMarker, type Utility } from '../src/strategy.ts';
 import { maxWallLength, smoothWall, wallLength } from '../src/wall-path.ts';
 
@@ -43,6 +43,55 @@ test('a scalable skill stores unscaled length when dragged on a scaled map', () 
 
   assert.equal(range.length, 46.24);
   assert.ok(Math.abs(patch.length - (range.min + 50)) < 1e-9);
+});
+
+test('directional ranges and distance handles include the gap from the cast point', () => {
+  const center = point(500, 400);
+  const skills = [['breach', 2, 8], ['breach', 3, 8], ['iso', 0, 5], ['waylay', 3, 3]] as const;
+  for (const [type, index, gapMeters] of skills) {
+    const item = makeAbility(type, index, project(center, false), true, map, false);
+    const frame = { item, collection: 'abilityData', map, page: defense, version } as const;
+    const geometry = abilityGeometry(abilityFor(type, index)!, map.id);
+    const rect = abilityRectRange(item, map, geometry);
+    const gap = gapMeters * 5.78 * map.scale * virtualToWorld;
+    assert.ok(Math.abs(rect.forward - rect.height - gap) < 1e-9);
+    const handle = objectHandles(frame, 13).find(handle => handle.mode === (geometry.scalable ? 'length' : 'rotate'))!;
+    const tip = center.dy + rect.forward + (geometry.scalable ? 0 : 13);
+    assert.ok(Math.abs(handle.position.dy - tip) < 1e-9);
+  }
+});
+
+test('Sage can rotate the wall sprite around its existing placement anchor', () => {
+  const center = point(500, 400);
+  const item = makeAbility('sage', 0, center, true, map, true);
+  const frame = { item, collection: 'abilityData', map, page: newPage(0), version } as const;
+  const [handle] = objectHandles(frame, 13);
+  assert.equal(handle.mode, 'rotate');
+  assert.deepEqual(transformObject(frame, handle, handle.position, add(center, point(39, 0)), true), { rotation: Math.PI / 2 });
+});
+
+test('plain skill icons turn from upright on defense without adding a range handle', () => {
+  for (const [type, index] of [['sova', 0], ['fade', 0], ['yoru', 2]] as const) {
+    const item = makeAbility(type, index, point(500, 400), true, map, false);
+    const frame = { item, collection: 'abilityData', map, page: defense, version } as const;
+    assert.equal(canRotate(item, map), true);
+    assert.deepEqual(objectHandles(frame, 13), []);
+    const rotation = stepObjectRotation(item, map, false, true);
+    assert.equal(rotation, Math.PI * 5 / 4);
+    assert.equal(stepObjectRotation({ ...item, rotation }, map, false, false), Math.PI);
+    assert.equal(stepObjectRotation({ ...item, rotation: -Math.PI / 4 }, map, true, true), 2 * Math.PI);
+    const attack = { ...newPage(0), abilityData: [item, { ...item, id: 'turned', rotation: -Math.PI }] };
+    const flipped = flipPage(attack, 'false', map, 96);
+    assert.deepEqual(flipped.abilityData.map(marker => marker.rotation), [0, 2 * Math.PI]);
+  }
+});
+
+test('Killjoy turret and Alarmbot use outlined outer ranges', () => {
+  for (const index of [1, 2]) {
+    const geometry = abilityGeometry(abilityFor('killjoy', index)!, map.id);
+    assert.equal(hasCircleRangeFill(geometry), false);
+  }
+  assert.equal(hasCircleRangeFill(abilityFor('killjoy', 0)!.geometry), true);
 });
 
 test('fixed-length skills rotate from their range tip around a stationary cast point', () => {

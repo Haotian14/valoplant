@@ -5,8 +5,8 @@ import {
   abilityFor, abilityGeometry, agentById, cssColor, gameAsset, mapArtworkFrame, project, virtualToWorld, worldWidth,
   type MapInfo, type Point,
 } from './catalog.ts';
-import { abilityRectRange, abilityVision, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, sectorPath,
-  uprightDimensions, uprightPosition, uprightScale, usesInactiveTrace, worldMarker } from './geometry.ts';
+import { abilityRectRange, abilityTurnsGlyph, abilityVision, barrierMeshAxes, canonicalMarkers, hasCircleRangeFill, meshArmLength,
+  metersToWorld, pageIsAttack, sectorPath, uprightDimensions, uprightPosition, uprightScale, usesInactiveTrace, worldMarker } from './geometry.ts';
 import { drawingPoints, type AbilityMarker, type AgentMarker, type CanvasItem, type CanvasSelection, type Collection,
   type Drawing, type ImageMarker, type LineupLink, type Page, type TextMarker, type Utility } from './strategy.ts';
 import { savedWallPath, smoothWall } from './wall-path.ts';
@@ -137,7 +137,7 @@ export function AgentArt({ marker, page, map, rotation, origin }: {
   marker: AgentMarker; page: Page; map: MapInfo; rotation: number; origin: Point;
 }) {
   const agent = agentById[marker.type];
-  const size = (page.settings.agentSize ?? 35) * virtualToWorld;
+  const size = (page.settings.agentSize ?? 35) * virtualToWorld * .8;
   const color = teamColor(page, marker.isAlly);
   return <>
     {marker.kind === 'viewCone' && <VisionSector origin={origin} radius={(marker.length ?? 85) * virtualToWorld}
@@ -158,7 +158,9 @@ export function AgentArt({ marker, page, map, rotation, origin }: {
   </>;
 }
 
-export function AbilityArt({ marker, page, map, rotation, origin }: { marker: AbilityMarker; page: Page; map: MapInfo; rotation: number; origin: Point }) {
+export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = true }: {
+  marker: AbilityMarker; page: Page; map: MapInfo; rotation: number; origin: Point; rotateGlyph?: boolean;
+}) {
   const ability = abilityFor(marker.data.type, marker.data.index);
   if (!ability) return <circle r={12} fill={teamColor(page, marker.isAlly)} />;
   const geometry = abilityGeometry(ability, map.id);
@@ -167,6 +169,8 @@ export function AbilityArt({ marker, page, map, rotation, origin }: { marker: Ab
   const radius = (geometry.diameter ?? 0) * virtualToWorld / 2;
   const width = (geometry.width ?? 6) * virtualToWorld;
   const rect = geometry.kind === 'rect' ? abilityRectRange(marker, map, geometry) : undefined;
+  const wallImageWidth = geometry.bounds[0] * virtualToWorld;
+  const wallImageHeight = geometry.kind === 'rotatableImage' ? (geometry.height ?? 0) * map.scale * virtualToWorld : 0;
   const visibility = marker.visualState;
   const fill = visibility?.showRangeFill !== false;
   const inactive = !fill && usesInactiveTrace(marker);
@@ -175,33 +179,43 @@ export function AbilityArt({ marker, page, map, rotation, origin }: { marker: Ab
   const innerStroke = visibility?.showInnerOutline !== false ? color : 'none';
   const wall = geometry.kind === 'wall' && savedWallPath(marker, map);
   const sign = pageIsAttack(page) ? 1 : -1;
+  const glyphTransform = rotateGlyph && marker.rotation && abilityTurnsGlyph(marker, map, geometry) ? `rotate(${rotation})` : undefined;
   return <>
     {cone && visibility?.showVisionCone !== false && <VisionSector origin={origin} color={color} radius={cone.length * cone.displayScale}
       sweep={cone.angle} rotation={rotation} elevation={marker.visionElevation} />}
     {wall && wall.length > 0 && <polyline points={smoothWall(wall).map(p => `${p.dx * sign},${p.dy * sign}`).join(' ')}
       fill="none" stroke={color} strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" />}
     <g transform={`rotate(${rotation})`} opacity={visibility?.isActive === false ? .28 : 1}>
-      {geometry.kind === 'circle' && <circle r={radius} fill={fill ? color : 'none'} fillOpacity=".12" stroke={stroke} strokeWidth="2.5" />}
-      {geometry.kind === 'circle' && !!geometry.inner && <circle r={geometry.inner * virtualToWorld / 2}
-        fill={visibility?.showInnerFill !== false ? color : 'none'} fillOpacity=".1" stroke={innerStroke} strokeWidth="1.6" strokeDasharray="6 4" />}
-      {geometry.kind === 'sector' && <path d={sectorPath(radius, geometry.sweep ?? 90)}
-        fill={fill ? color : 'none'} fillOpacity=".16" stroke={stroke} strokeWidth="2" />}
-      {rect && <rect x={-width / 2} y={-rect.forward} width={width} height={rect.height} rx="2"
-        fill={fill ? color : 'none'} fillOpacity=".22" stroke={fill ? stroke : inactive ? color : 'none'}
-        strokeDasharray={inactive ? '6 4' : undefined} strokeWidth="2.5" />}
+      <g pointerEvents={visibility?.isIconHidden ? undefined : 'none'}>
+        {geometry.kind === 'circle' && <circle r={radius} fill={fill && hasCircleRangeFill(geometry) ? color : 'none'}
+          fillOpacity=".12" stroke={stroke} strokeWidth="2.5" />}
+        {geometry.kind === 'circle' && !!geometry.inner && <circle r={geometry.inner * virtualToWorld / 2}
+          fill={visibility?.showInnerFill !== false ? color : 'none'} fillOpacity=".1" stroke={innerStroke} strokeWidth="1.6" strokeDasharray="6 4" />}
+        {geometry.kind === 'sector' && <path d={sectorPath(radius, geometry.sweep ?? 90)}
+          fill={fill ? color : 'none'} fillOpacity=".16" stroke={stroke} strokeWidth="2" />}
+        {rect && (geometry.sideBorders ? fill && <path
+          d={`M ${-width / 2} ${-rect.forward} v ${rect.height} M ${width / 2} ${-rect.forward} v ${rect.height}`}
+          fill="none" stroke={color} strokeWidth="2.5" />
+          : <rect x={-width / 2} y={-rect.forward} width={width} height={rect.height} rx="2"
+            fill={fill ? color : 'none'} fillOpacity=".22" stroke={fill ? stroke : inactive ? color : 'none'}
+            strokeDasharray={inactive ? '6 4' : undefined} strokeWidth="2.5" />)}
+        {geometry.kind === 'image' && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)}
+          x={-(radius || geometry.bounds[0] * virtualToWorld / 2)} y={-(radius || geometry.bounds[1] * virtualToWorld / 2)}
+          width={radius ? radius * 2 : geometry.bounds[0] * virtualToWorld} height={radius ? radius * 2 : geometry.bounds[1] * virtualToWorld} />}
+        {geometry.kind === 'image' && inactive && <circle r={radius || geometry.bounds[0] * virtualToWorld / 2}
+          fill="none" stroke="#76efbb" strokeWidth="2" strokeDasharray="6 4" />}
+      </g>
       {geometry.kind === 'mesh' && fill && barrierMeshAxes.map((axis, index) => {
         const length = metersToWorld(meshArmLength(marker.armLengthsMeters?.[index]), map);
         return <line key={index} x1={0} y1={0} x2={axis.dx * length} y2={axis.dy * length} stroke={color} strokeWidth="5" />;
       })}
-      {geometry.kind === 'image' && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)}
-        x={-(radius || geometry.bounds[0] * virtualToWorld / 2)} y={-(radius || geometry.bounds[1] * virtualToWorld / 2)}
-        width={radius ? radius * 2 : geometry.bounds[0] * virtualToWorld} height={radius ? radius * 2 : geometry.bounds[1] * virtualToWorld} />}
-      {geometry.kind === 'image' && inactive && <circle r={radius || geometry.bounds[0] * virtualToWorld / 2}
-        fill="none" stroke="#76efbb" strokeWidth="2" strokeDasharray="6 4" />}
+      {wallImageHeight > 0 && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)}
+        x={-wallImageWidth / 2} y={-wallImageHeight / 2} width={wallImageWidth} height={wallImageHeight} />}
     </g>
     {!marker.visualState?.isIconHidden && <>
       <rect x={-size / 2} y={-size / 2} width={size} height={size} rx={size * .3} fill="#17171d" stroke={teamColor(page, marker.isAlly)} strokeWidth="2" />
-      <image href={gameAsset(ability.icon)} x={-size / 2 + 4} y={-size / 2 + 4} width={size - 8} height={size - 8} />
+      <image href={gameAsset(ability.icon)} x={-size / 2 + 4} y={-size / 2 + 4} width={size - 8} height={size - 8}
+        transform={glyphTransform} />
     </>}
   </>;
 }
@@ -382,7 +396,8 @@ export function LineupArt({ page, version, map, active, hiddenId, onOpen, onEndp
         <line x1={agent.dx} y1={agent.dy} x2={ability.dx} y2={ability.dy} stroke="#ac8aff" strokeWidth="3" strokeDasharray="11 8" />
         <line x1={agent.dx} y1={agent.dy} x2={ability.dx} y2={ability.dy} stroke="transparent" strokeWidth="22" />
         <g transform={`translate(${agent.dx} ${agent.dy})`}><AgentArt marker={origin.agent} page={page} map={map} rotation={0} origin={agent} /></g>
-        <g transform={`translate(${ability.dx} ${ability.dy})`}><AbilityArt marker={landing.ability} page={page} map={map} rotation={rotation} origin={ability} /></g>
+        <g transform={`translate(${ability.dx} ${ability.dy})`}><AbilityArt marker={landing.ability} page={page} map={map}
+          rotation={rotation} origin={ability} rotateGlyph={false} /></g>
         {onEndpoint && ([['origin', agent], ['landing', ability]] as const).map(([end, p]) =>
           <circle key={end} cx={p.dx} cy={p.dy} r="19" fill="transparent" pointerEvents="all"
             onPointerDown={event => {

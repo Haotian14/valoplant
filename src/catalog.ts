@@ -10,6 +10,7 @@ export type AbilityGeometry = {
   width?: number; height?: number; minLength?: number; fullLengthByDefault?: boolean;
   diameter?: number; inner?: number; sweep?: number;
   color?: number; sprite?: string; scalable?: boolean;
+  rangeOffset?: number; rangeFill?: boolean; sideBorders?: boolean;
 };
 export type Ability = {
   index: number; name: string; icon: string; geometry: AbilityGeometry;

@@ -13,6 +13,11 @@ export function abilityAnchor(type: string, index: number, map: MapInfo): Point 
   return point(dx * virtualToWorld, dy * virtualToWorld);
 }
 
+export function markerAbility(item: CanvasItem, map: MapInfo) {
+  const ability = 'data' in item ? abilityFor(item.data.type, item.data.index) : undefined;
+  return ability && abilityGeometry(ability, map.id);
+}
+
 export function abilityLengthRange(marker: AbilityMarker, map: MapInfo) {
   const ability = abilityFor(marker.data.type, marker.data.index);
   const geometry = ability?.geometry;
@@ -28,7 +33,8 @@ export function abilityLengthRange(marker: AbilityMarker, map: MapInfo) {
 export function abilityRectRange(marker: AbilityMarker, map: MapInfo, geometry: AbilityGeometry) {
   const variable = abilityLengthRange(marker, map);
   const height = variable ? variable.length * variable.displayScale : (marker.length || geometry.height || 60) * virtualToWorld;
-  return { height, forward: Math.min(height, geometry.anchor[1] * virtualToWorld || height) };
+  const offset = (geometry.rangeOffset ?? 0) * map.scale * virtualToWorld;
+  return { height, forward: Math.min(height, geometry.anchor[1] * virtualToWorld || height) + offset };
 }
 
 export function abilityVision(marker: AbilityMarker, map: MapInfo) {
@@ -43,6 +49,12 @@ export function abilityVision(marker: AbilityMarker, map: MapInfo) {
   return { angle, length: Math.min(maximum, Math.max(minimum, stored * scale)) / scale,
     min: minimum / scale, max: maximum / scale, displayScale: virtualToWorld * scale };
 }
+
+export function abilityTurnsGlyph(item: CanvasItem, map: MapInfo, geometry = markerAbility(item, map)) {
+  return 'data' in item && geometry !== undefined && ['icon', 'image', 'wall'].includes(geometry.kind) && !abilityVision(item, map);
+}
+
+export const hasCircleRangeFill = (geometry: AbilityGeometry) => !geometry.inner && geometry.rangeFill !== false;
 
 export const usesInactiveTrace = (marker: AbilityMarker) => marker.data.type === 'viper' && [1, 2].includes(marker.data.index);
 
@@ -165,8 +177,12 @@ export function flipPage(page: Page, side: Page['isAttack'], map: MapInfo, versi
     if ('text' in item) anchor = point((item.size ?? 185) * .463, Math.max(18, (item.fontSize ?? 16) * .85));
     if ('aspectRatio' in item) anchor = point(item.scale * .463, (item.scale * .463) / Math.max(.01, item.aspectRatio));
     const position = subtract(project(add(item.position, anchor), false), anchor);
-    const rotation = 'rotation' in item ? { rotation: (item.rotation ?? 0) + Math.PI } : {};
-    return { ...item, ...rotation, position };
+    if (!('rotation' in item)) return { ...item, position };
+    const rotation = item.rotation ?? 0;
+    const turnsGlyph = abilityTurnsGlyph(item, map);
+    if (turnsGlyph && rotation === 0) return { ...item, position };
+    const turned = rotation + Math.PI;
+    return { ...item, rotation: turnsGlyph && turned === 0 ? 2 * Math.PI : turned, position };
   }
   return {
     ...page,

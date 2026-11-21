@@ -1,8 +1,8 @@
-import { draggedAngle, draggedEdge, rotatedVector } from './board-gestures.ts';
-import { abilityFor, abilityGeometry, add, point, project, subtract, virtualToWorld, type MapInfo, type Point } from './catalog.ts';
+import { draggedAngle, draggedEdge, rotatedVector, steppedRotation } from './board-gestures.ts';
+import { add, point, project, subtract, virtualToWorld, type MapInfo, type Point } from './catalog.ts';
 import {
-  abilityLengthRange, abilityRectRange, abilityVision, barrierMeshAxes, canonicalMarkers, meshArmLength, metersToWorld, pageIsAttack, pinnedUprightPosition, uprightDimensions, uprightPosition, uprightScale,
-  withMarkerCenter, worldMarker,
+  abilityLengthRange, abilityRectRange, abilityTurnsGlyph, abilityVision, barrierMeshAxes, canonicalMarkers, markerAbility,
+  meshArmLength, metersToWorld, pageIsAttack, pinnedUprightPosition, uprightDimensions, uprightPosition, uprightScale, withMarkerCenter, worldMarker,
 } from './geometry.ts';
 import type { CanvasItem, Collection, Page, Utility } from './strategy.ts';
 import { maxWallLength, maxWallPoints, reshapeWall, savedWallPath, wallMidpoints } from './wall-path.ts';
@@ -15,17 +15,23 @@ export type ObjectFrame = { item: CanvasItem; collection: Collection; page: Page
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-export function markerAbility(item: CanvasItem, map: MapInfo) {
-  const ability = 'data' in item ? abilityFor(item.data.type, item.data.index) : undefined;
-  return ability && abilityGeometry(ability, map.id);
+export function canRotateRange(item: CanvasItem, map: MapInfo, ability = markerAbility(item, map)) {
+  if ('data' in item && abilityVision(item, map)) return item.visualState?.showVisionCone !== false;
+  return ability ? ['sector', 'rect', 'mesh', 'rotatableImage'].includes(ability.kind)
+    : 'kind' in item && item.kind === 'viewCone' || 'rotation' in item && 'type' in item &&
+      (item.type === 'customRectangle' || item.type.startsWith('viewCone'));
 }
 
 export function canRotate(item: CanvasItem, map: MapInfo) {
-  if ('data' in item && abilityVision(item, map)) return item.visualState?.showVisionCone !== false;
   const ability = markerAbility(item, map);
-  return ability ? ['sector', 'rect', 'mesh'].includes(ability.kind)
-    : 'kind' in item && item.kind === 'viewCone' || 'rotation' in item && 'type' in item &&
-      (item.type === 'customRectangle' || item.type.startsWith('viewCone'));
+  return canRotateRange(item, map, ability) || abilityTurnsGlyph(item, map, ability);
+}
+
+export function stepObjectRotation(item: CanvasItem, map: MapInfo, canonical: boolean, clockwise: boolean) {
+  const rotation = objectRotation(item);
+  const turnsGlyph = abilityTurnsGlyph(item, map);
+  const next = steppedRotation(turnsGlyph && !canonical && rotation === 0 ? Math.PI : rotation, clockwise);
+  return turnsGlyph && next === 0 ? 2 * Math.PI : next;
 }
 
 function directionLength(item: CanvasItem, map: MapInfo) {
@@ -107,12 +113,13 @@ export function objectHandles(
     addHandle('radius', point(diagonal, diagonal), '调整范围直径');
   }
   const length = directionLength(item, map);
-  const lengthHandle = length ? Math.max(gap * 2, length.length * length.displayScale) : 0;
+  const rect = ability?.kind === 'rect' && 'data' in item ? abilityRectRange(item, map, ability) : undefined;
+  const lengthHandle = length ? Math.max(gap * 2, rect?.forward ?? length.length * length.displayScale) : 0;
   if (length) addHandle('length', point(0, -lengthHandle), '调整作用距离');
-  if (canRotate(item, map)) {
+  if (canRotateRange(item, map, ability)) {
     let radius = length ? lengthHandle + gap * 2 : gap * 3;
-    if (!length && ability?.kind === 'rect' && 'data' in item) {
-      const tip = Math.max(radius, abilityRectRange(item, map, ability).forward + gap);
+    if (!length && rect) {
+      const tip = Math.max(radius, rect.forward + gap);
       // Keep the same handle distance from the cast point throughout the drag.
       const position = add(center, rotatedVector(point(0, -tip), objectRotation(savedItem) + sideAngle));
       if (!isVisible || isVisible(position)) radius = tip;
