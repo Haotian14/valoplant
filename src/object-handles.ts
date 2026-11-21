@@ -1,5 +1,5 @@
 import { draggedAngle, draggedEdge, rotatedVector, steppedRotation } from './board-gestures.ts';
-import { add, point, project, subtract, virtualToWorld, type MapInfo, type Point } from './catalog.ts';
+import { add, point, project, subtract, virtualToWorld, worldPerMeter, type MapInfo, type Point } from './catalog.ts';
 import {
   abilityLengthRange, abilityRectRange, abilityTurnsGlyph, abilityVision, barrierMeshAxes, canonicalMarkers, markerAbility,
   meshArmLength, metersToWorld, pageIsAttack, pinnedUprightPosition, uprightDimensions, uprightPosition, uprightScale, withMarkerCenter, worldMarker,
@@ -91,7 +91,7 @@ export function objectHandles(
   if ('data' in item && ability?.kind === 'mesh' && item.visualState?.showRangeFill !== false) {
     const lengths = item.armLengthsMeters;
     barrierMeshAxes.forEach((axis, index) => {
-      const length = metersToWorld(meshArmLength(lengths?.[index]), map);
+      const length = meshArmLength(lengths?.[index]) * worldPerMeter(map);
       handles.push({ mode: 'meshArm', index, position: add(center, rotatedVector(point(axis.dx * length, axis.dy * length), angle)),
         label: '调整这条屏障臂' });
     });
@@ -172,7 +172,7 @@ export function transformObject(
   const displayAngle = angle + (canonical ? 0 : Math.PI);
   if (mode === 'meshArm' && 'data' in item) {
     const axis = rotatedVector(barrierMeshAxes[handle.index], displayAngle);
-    const change = (delta.dx * axis.dx + delta.dy * axis.dy) / metersToWorld(1, map);
+    const change = (delta.dx * axis.dx + delta.dy * axis.dy) / worldPerMeter(map);
     const armLengthsMeters = barrierMeshAxes.map((_, index) => meshArmLength(item.armLengthsMeters?.[index]));
     armLengthsMeters[handle.index] = meshArmLength(armLengthsMeters[handle.index] + change);
     return { armLengthsMeters };

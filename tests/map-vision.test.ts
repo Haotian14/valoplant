@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { mapArtworkFrame, mapById, maps, point, project } from '../src/catalog.ts';
+import { abilityFor, abilityGeometry, mapArtworkFrame, mapById, maps, point, project, virtualToWorld, worldPerMeter } from '../src/catalog.ts';
 import { changedMapDoors, doorLine, findMapDoor, mapDoors, toggleMapDoor } from '../src/map-doors.ts';
 import { projectSightWalls, sightDoorWalls, sightPolygon } from '../src/map-vision.ts';
 import { readIca, writeIca } from '../src/archive.ts';
@@ -30,6 +30,21 @@ test('view cones stop at the first wall and continue past its endpoints', () => 
   assert.ok(cone.some(p => Math.abs(p.dx) < 1e-8 && Math.abs(p.dy + 20) < 1e-8));
   assert.ok(cone.some(p => Math.abs(Math.hypot(p.dx, p.dy) - 90) < 1e-8));
   assert.equal(sightPolygon(walls, origin, 90, Math.PI, 90), undefined);
+});
+
+test('Trademark keeps its ten-metre scan radius on the visible side of a wall', () => {
+  const map = mapById.lotus;
+  const geometry = abilityGeometry(abilityFor('chamber', 0)!, map.id);
+  const radius = geometry.diameter! * virtualToWorld / 2;
+  const origin = point(100, 100);
+  const wall = [[120, 0, 120, 200]] as const;
+  const range = sightPolygon(wall, origin, radius, 0, 360)!;
+
+  assert.equal(geometry.requiresSight, true);
+  assert.ok(Math.abs(radius - 10 * worldPerMeter(map)) < 1e-9);
+  assert.ok(range.every(p => p.dx <= 20 + 1e-9));
+  assert.ok(range.some(p => Math.abs(p.dx + radius) < 1e-9));
+  assert.equal(sightPolygon([], origin, radius, 0, 360), undefined);
 });
 
 test('the Ascent door blocks the same sightline on either side only when shut', () => {

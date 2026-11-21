@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { abilityFor, abilityGeometry, add, mapById, point, project, virtualToWorld } from '../src/catalog.ts';
-import { abilityLengthRange, abilityRectRange, flipPage, hasCircleRangeFill, makeAbility, makeUtility, metersToWorld, uprightPosition } from '../src/geometry.ts';
+import { abilityFor, abilityGeometry, add, mapById, maps, point, project, virtualToWorld } from '../src/catalog.ts';
+import { abilityLengthRange, abilityRectRange, flipPage, hasCircleRangeFill, makeAbility, makeUtility, uprightPosition } from '../src/geometry.ts';
 import { canRotate, objectHandles, stepObjectRotation, transformObject } from '../src/object-handles.ts';
 import { newPage, type ImageMarker, type Utility } from '../src/strategy.ts';
 import { maxWallLength, smoothWall, wallLength } from '../src/wall-path.ts';
@@ -43,6 +43,15 @@ test('a scalable skill stores unscaled length when dragged on a scaled map', () 
 
   assert.equal(range.length, 46.24);
   assert.ok(Math.abs(patch.length - (range.min + 50)) < 1e-9);
+});
+
+test('Fault Line is eight metres wide while keeping the original anchor across maps', () => {
+  const skill = abilityFor('breach', 2)!;
+  for (const map of maps) {
+    const geometry = abilityGeometry(skill, map.id);
+    assert.ok(Math.abs(geometry.width! - 8 * 5.78 * map.scale) < 1e-9, map.id);
+    assert.ok(Math.abs(geometry.anchor[0] - 7.5 * 5.78 * map.scale / 2) < 1e-9, map.id);
+  }
 });
 
 test('directional ranges and distance handles include the gap from the cast point', () => {
@@ -144,12 +153,16 @@ test('a bend pulled from a wall segment respects the saved orientation and maxim
 });
 
 test('dragging a single Deadlock mesh arm on defense preserves the native arm order', () => {
-  const mesh = makeAbility('deadlock', 2, point(500, 300), true, map, false);
+  const center = point(500, 300);
+  const mesh = makeAbility('deadlock', 2, center, true, map, false);
   const item = { ...mesh, armLengthsMeters: [10, 9, 8, 7], rotation: Math.PI / 2 };
   const frame = { item, collection: 'abilityData', map, page: defense, version } as const;
   const handles = objectHandles(frame, 13).filter(handle => handle.mode === 'meshArm');
   const first = handles[0];
-  const move = metersToWorld(3, map) * Math.SQRT1_2;
+  const screen = project(center, false);
+  const meter = 5.78 * map.scale * virtualToWorld;
+  assert.ok(Math.abs(Math.hypot(first.position.dx - screen.dx, first.position.dy - screen.dy) - 10 * meter) < 1e-9);
+  const move = 3 * meter * Math.SQRT1_2;
   const patch = transformObject(frame, first, first.position, add(first.position, point(move, move)), false);
   assert.deepEqual(handles.map(handle => handle.index), [0, 1, 2, 3]);
   assert.deepEqual(Object.keys(patch), ['armLengthsMeters']);

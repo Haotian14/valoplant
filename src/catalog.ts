@@ -10,7 +10,7 @@ export type AbilityGeometry = {
   width?: number; height?: number; minLength?: number; fullLengthByDefault?: boolean;
   diameter?: number; inner?: number; sweep?: number;
   color?: number; sprite?: string; scalable?: boolean;
-  rangeOffset?: number; rangeFill?: boolean; sideBorders?: boolean;
+  rangeOffset?: number; rangeFill?: boolean; sideBorders?: boolean; requiresSight?: boolean;
 };
 export type Ability = {
   index: number; name: string; icon: string; geometry: AbilityGeometry;
@@ -25,6 +25,7 @@ export const agentById = Object.fromEntries(agents.map(agent => [agent.id, agent
 export const worldWidth = 1000 * 16 / 9;
 export const worldHeight = 1000;
 export const virtualToWorld = 1000 / 831;
+export const worldPerMeter = (map: MapInfo) => 5.78 * map.scale * virtualToWorld;
 export const point = (dx: number, dy: number): Point => ({ dx, dy });
 export const add = (a: Point, b: Point) => point(a.dx + b.dx, a.dy + b.dy);
 export const subtract = (a: Point, b: Point) => point(a.dx - b.dx, a.dy - b.dy);

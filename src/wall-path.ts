@@ -1,10 +1,9 @@
 import { distance, rotatedVector } from './board-gestures.ts';
-import type { MapInfo, Point } from './catalog.ts';
+import { worldPerMeter, type MapInfo, type Point } from './catalog.ts';
 import type { AbilityMarker } from './strategy.ts';
 
 const origin = { dx: 0, dy: 0 };
 const samples = 16;
-const worldPerMeter = (map: MapInfo) => 5.78 * map.scale * 1000 / 831;
 export const maxWallPoints = 7;
 export const maxWallLength = (map: MapInfo) => 60 * worldPerMeter(map);
 

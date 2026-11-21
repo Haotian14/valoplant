@@ -2,7 +2,7 @@ import { t } from './locale.ts';
 import { createContext, Fragment, useContext, useLayoutEffect, useMemo, useRef, type PointerEvent, type ReactNode } from 'react';
 import { distance } from './board-gestures.ts';
 import {
-  abilityFor, abilityGeometry, agentById, cssColor, gameAsset, mapArtworkFrame, project, virtualToWorld, worldWidth,
+  abilityFor, abilityGeometry, agentById, cssColor, gameAsset, mapArtworkFrame, project, virtualToWorld, worldPerMeter, worldWidth,
   type MapInfo, type Point,
 } from './catalog.ts';
 import { abilityRectRange, abilityTurnsGlyph, abilityVision, barrierMeshAxes, canonicalMarkers, hasCircleRangeFill, meshArmLength,
@@ -72,20 +72,32 @@ export function MapDoorBars({ map, attack, changed, active, toggle, amounts }: {
   })}</g>;
 }
 
-function VisionSector({ origin, color, radius, sweep, rotation, elevation }: {
-  origin: Point; color: string; radius: number; sweep: number; rotation: number; elevation?: number;
-}) {
+function useSightPath(origin: Point, radius: number, sweep: number, rotation: number, elevation?: number) {
   const walls = useContext(VisionWalls);
   const height = useContext(VisionHeight);
-  const opacity = useContext(VisionOpacity);
-  const path = useMemo(() => {
+  return useMemo(() => {
     const eye = height && resolvedElevation(elevationsAt(height.model, origin), elevation);
     const blockers = height && eye != null ? [...wallsAtElevation(height.model, eye), ...height.doors] : walls;
     const boundary = sightPolygon(blockers, origin, radius, rotation * Math.PI / 180, sweep);
     return boundary && `M ${boundary.map(p => `${p.dx.toFixed(2)} ${p.dy.toFixed(2)}`).join(' L ')} Z`;
   }, [walls, height, origin.dx, origin.dy, radius, sweep, rotation, elevation]);
+}
+
+function VisionSector({ origin, color, radius, sweep, rotation, elevation }: {
+  origin: Point; color: string; radius: number; sweep: number; rotation: number; elevation?: number;
+}) {
+  const path = useSightPath(origin, radius, sweep, rotation, elevation);
+  const opacity = useContext(VisionOpacity);
   return <path d={path ?? sectorPath(radius, sweep)} transform={path ? undefined : `rotate(${rotation})`}
     fill={color} fillOpacity={opacity} stroke={color} strokeWidth="2" strokeOpacity=".66" pointerEvents="none" />;
+}
+
+function SightCircle({ origin, radius, elevation, fill, stroke }: {
+  origin: Point; radius: number; elevation?: number; fill: string; stroke: string;
+}) {
+  const path = useSightPath(origin, radius, 360, 0, elevation);
+  const paint = { fill, fillOpacity: .12, stroke, strokeWidth: 2.5 };
+  return path ? <path d={path} {...paint} /> : <circle r={radius} {...paint} />;
 }
 
 export function DrawingArt({ drawing, attack, mapScale, selected }: { drawing: Drawing; attack: boolean; mapScale: number; selected?: boolean }) {
@@ -174,10 +186,14 @@ export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = 
   const wallImageWidth = geometry.bounds[0] * virtualToWorld;
   const wallImageHeight = geometry.kind === 'rotatableImage' ? (geometry.height ?? 0) * map.scale * virtualToWorld : 0;
   const visibility = marker.visualState;
+  const rangeOpacity = visibility?.isActive === false ? .28 : 1;
+  const rangePointerEvents = visibility?.isIconHidden ? undefined : 'none';
   const fill = visibility?.showRangeFill !== false;
   const inactive = !fill && usesInactiveTrace(marker);
   const cone = abilityVision(marker, map);
   const stroke = visibility?.showRangeOutline !== false ? color : 'none';
+  const circleFill = fill && hasCircleRangeFill(geometry) ? color : 'none';
+  const sightCircle = geometry.kind === 'circle' && geometry.requiresSight;
   const innerStroke = visibility?.showInnerOutline !== false ? color : 'none';
   const wall = geometry.kind === 'wall' && savedWallPath(marker, map);
   const sign = pageIsAttack(page) ? 1 : -1;
@@ -187,9 +203,12 @@ export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = 
       sweep={cone.angle} rotation={rotation} elevation={marker.visionElevation} />}
     {wall && wall.length > 0 && <polyline points={smoothWall(wall).map(p => `${p.dx * sign},${p.dy * sign}`).join(' ')}
       fill="none" stroke={color} strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" />}
-    <g transform={`rotate(${rotation})`} opacity={visibility?.isActive === false ? .28 : 1}>
-      <g pointerEvents={visibility?.isIconHidden ? undefined : 'none'}>
-        {geometry.kind === 'circle' && <circle r={radius} fill={fill && hasCircleRangeFill(geometry) ? color : 'none'}
+    {sightCircle && (circleFill !== 'none' || stroke !== 'none') && <g opacity={rangeOpacity} pointerEvents={rangePointerEvents}>
+      <SightCircle origin={origin} radius={radius} elevation={marker.visionElevation} fill={circleFill} stroke={stroke} />
+    </g>}
+    <g transform={`rotate(${rotation})`} opacity={rangeOpacity}>
+      <g pointerEvents={rangePointerEvents}>
+        {geometry.kind === 'circle' && !sightCircle && <circle r={radius} fill={circleFill}
           fillOpacity=".12" stroke={stroke} strokeWidth="2.5" />}
         {geometry.kind === 'circle' && !!geometry.inner && <circle r={geometry.inner * virtualToWorld / 2}
           fill={visibility?.showInnerFill !== false ? color : 'none'} fillOpacity=".1" stroke={innerStroke} strokeWidth="1.6" strokeDasharray="6 4" />}
@@ -208,7 +227,7 @@ export function AbilityArt({ marker, page, map, rotation, origin, rotateGlyph = 
           fill="none" stroke="#76efbb" strokeWidth="2" strokeDasharray="6 4" />}
       </g>
       {geometry.kind === 'mesh' && fill && barrierMeshAxes.map((axis, index) => {
-        const length = metersToWorld(meshArmLength(marker.armLengthsMeters?.[index]), map);
+        const length = meshArmLength(marker.armLengthsMeters?.[index]) * worldPerMeter(map);
         return <line key={index} x1={0} y1={0} x2={axis.dx * length} y2={axis.dy * length} stroke={color} strokeWidth="5" />;
       })}
       {wallImageHeight > 0 && fill && geometry.sprite && <image href={gameAsset(geometry.sprite)}
