@@ -116,12 +116,16 @@ img { display: block; max-width: 100%; }
   color: inherit; text-align: left; display: grid; cursor: pointer; min-width: 0;
 }
 .strategy-artwork { height: 126px; position: relative; display: block; overflow: hidden; border-radius: 12px 12px 0 0; background: #242036; }
-.strategy-artwork img { width: 100%; height: 100%; object-fit: cover; }
+.strategy-artwork > img { width: 100%; height: 100%; object-fit: cover; }
 .strategy-artwork::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 35%, #17121ee0); pointer-events: none; }
 .map-chip {
   position: absolute; bottom: 9px; left: 10px; z-index: 1; display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 7px; border-radius: 6px; border: 1px solid #ffffff26; color: #f4e9ff; background: #14121be1; font-size: .77rem;
 }
+.strategy-roster { position: absolute; top: 9px; right: 10px; z-index: 1; display: flex; align-items: center; gap: 3px; }
+.strategy-roster > * { border: 1px solid #ffffff35; border-radius: 5px; background: #14121be8; }
+.strategy-roster img { width: 28px; height: 28px; object-fit: cover; }
+.strategy-roster span { padding-inline: 4px; font-size: .7rem; line-height: 24px; }
 .strategy-info { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 13px 12px; }
 .strategy-info > span { display: grid; gap: 3px; min-width: 0; }
 .strategy-info strong, .strategy-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -133,6 +137,9 @@ img { display: block; max-width: 100%; }
 .strategy-list:not(.strategy-grid) .strategy-open { grid-template-columns: 119px 1fr; }
 .strategy-list:not(.strategy-grid) .strategy-artwork { height: 64px; border-radius: 12px 0 0 12px; }
 .strategy-list:not(.strategy-grid) .map-chip { bottom: 6px; left: 6px; }
+.strategy-list:not(.strategy-grid) .strategy-roster { top: 6px; right: 6px; gap: 1px; }
+.strategy-list:not(.strategy-grid) .strategy-roster img { width: 16px; height: 16px; border-radius: 3px; }
+.strategy-list:not(.strategy-grid) .strategy-roster span { padding-inline: 2px; font-size: .6rem; line-height: 14px; }
 .card-menu { top: 100%; right: 0; width: 168px; }
 .empty-state {
   display: flex; align-items: center; flex-direction: column; text-align: center; min-height: 290px; justify-content: center;

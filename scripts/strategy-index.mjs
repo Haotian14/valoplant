@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { readIca } from '../src/archive.ts';
+import { alliedRoster } from '../src/strategy.ts';
 
 const maxFileBytes = 64 * 1024 * 1024;
 
@@ -27,7 +28,7 @@ export async function buildStrategyIndex(root, writeFile) {
       const bytes = await readFile(file);
       const { document } = readIca(bytes);
       const revision = createHash('sha256').update(bytes).digest('hex');
-      const record = { path, name: path.at(-1).slice(0, -4), map: document.mapData, revision };
+      const record = { path, name: path.at(-1).slice(0, -4), map: document.mapData, revision, roster: alliedRoster(document.pages) };
       records.push(record);
       await writeFile?.(record, bytes);
     } catch (error) {

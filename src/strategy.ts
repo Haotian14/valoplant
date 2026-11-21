@@ -1,4 +1,4 @@
-import type { Point } from './catalog.ts';
+import { agentById, type Point } from './catalog.ts';
 
 type Base = { id: string; position: Point; isDeleted?: boolean; caption?: string; visionElevation?: number };
 export type AgentMarker = Base & {
@@ -89,6 +89,21 @@ export function newStrategy(map: string, name: string): Strategy {
     id: newId(), name, updated: now, createdAt: now, media: {},
     document: { versionNumber: currentIcaVersion, mapData: map, pages: [newPage(0)] },
   };
+}
+
+export function alliedRoster(pages: readonly Page[]): string[] {
+  const ids = new Set<string>();
+  function include(marker: AgentMarker | AbilityMarker, type: string) {
+    if (marker.isAlly !== false && !marker.isDeleted && Object.hasOwn(agentById, type)) ids.add(type);
+  }
+  for (const page of pages) {
+    for (const agent of page.agentData) include(agent, agent.type);
+    for (const ability of page.abilityData) include(ability, ability.data.type);
+    for (const { agent } of page.lineUpOrigins) {
+      if (agent) include(agent, agent.type);
+    }
+  }
+  return [...ids];
 }
 
 export function append<T extends Collection>(page: Page, collection: T, item: ItemByCollection<T>): Page {

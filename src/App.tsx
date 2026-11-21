@@ -4,10 +4,10 @@ import { ArrowDownToLine, ArrowUpRight, BookOpen, ChevronDown, CircleHelp, Cloud
 } from 'lucide-react';
 import Editor from './Editor.tsx';
 import { downloadIca, importIca } from './archive.ts';
-import { mapById, maps, mapThumb } from './catalog.ts';
+import { agentById, gameAsset, mapById, maps, mapThumb } from './catalog.ts';
 import { deleteDraft, loadDrafts, loadFolders, saveDraft, updateLibrary } from './storage.ts';
 import { defaultFolderColor, downloadLibrary, folderChain, folderIcons, readLibraryBackup, type LibraryFolder } from './library-backup.ts';
-import { newId, newStrategy, reindexPages, type Page, type Strategy } from './strategy.ts';
+import { alliedRoster, newId, newStrategy, reindexPages, type Page, type Strategy } from './strategy.ts';
 import { flipPage, pageIsAttack } from './geometry.ts';
 import { IconButton, Modal } from './ui.tsx';
 import { readPreferences } from './preferences.ts';
@@ -15,7 +15,7 @@ import StrategyViewer from './StrategyViewer.tsx';
 import LanguageSelect from './LanguageSelect.tsx';
 import { languageTag, t, useLanguage } from './locale.ts';
 
-type Entry = { path: string[]; name: string; map: string; revision: string };
+type Entry = { path: string[]; name: string; map: string; revision: string; roster?: string[] };
 type MapFilter = string;
 type Saving = 'saved' | 'saving' | 'failed';
 const catalogUrl = `${import.meta.env.BASE_URL}strategies/`;
@@ -368,7 +368,7 @@ export default function App() {
           {tab === 'team' && entries === null && !catalogError && <p className="muted loading" role="status">{t('正在读取团队战术…')}</p>}
           {hasItems && <div className={`strategy-list strategy-${layout}`}>
             {tab === 'team' ? teamItems.map(entry => <StrategyCard key={entryKey(entry)}
-              name={entry.name} map={entry.map} detail={entry.path.slice(0, -1).join(' / ') || t('团队战术')}
+              name={entry.name} map={entry.map} roster={entry.roster} detail={entry.path.slice(0, -1).join(' / ') || t('团队战术')}
               disabled={!!opening} opening={opening === entryKey(entry)} onOpen={() => openTeam(entry)} onPreview={() => openTeam(entry, true)} />)
               : <>
                 {visibleFolders.map(folder => <article className="strategy-card library-folder" key={folder.id} draggable
@@ -381,7 +381,8 @@ export default function App() {
                   <div className="strategy-more"><IconButton label={t('编辑文件夹')} onClick={() => setEditFolder(folder)}><MoreHorizontal size={19} /></IconButton></div>
                 </article>)}
                 {draftItems.map(strategy => <StrategyCard key={strategy.id}
-                name={strategy.name} map={strategy.document.mapData} detail={`${strategy.document.pages.length} 页 · ${date(strategy.updated)}`}
+                name={strategy.name} map={strategy.document.mapData} roster={alliedRoster(strategy.document.pages)}
+                detail={`${strategy.document.pages.length} 页 · ${date(strategy.updated)}`}
                 pinned={strategy.pinned} dragId={strategy.id}
                 onOpen={() => mapById[strategy.document.mapData] ? setActive(strategy) : notify('这张地图暂未收录')}
                 menu={selectedMenu === strategy.id}
@@ -498,16 +499,24 @@ export default function App() {
   </>;
 }
 
-function StrategyCard({ name, map, detail, disabled, opening, menu, pinned, dragId, onMenu, onExport, onRename, onMove, onPin, onDuplicate, onRemove, onOpen, onPreview }:
-  { name: string; map: string; detail: string; disabled?: boolean; opening?: boolean; menu?: boolean;
+function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu, pinned, dragId, onMenu, onExport, onRename, onMove, onPin, onDuplicate, onRemove, onOpen, onPreview }:
+  { name: string; map: string; detail: string; roster?: string[]; disabled?: boolean; opening?: boolean; menu?: boolean;
     pinned?: boolean; dragId?: string; onRename?: () => void; onMove?: () => void; onPin?: () => void;
     onMenu?: () => void; onExport?: () => void; onDuplicate?: () => void; onRemove?: () => void; onOpen: () => void; onPreview?: () => void; }) {
+  const agents = roster.filter(id => Object.hasOwn(agentById, id)).map(id => agentById[id]);
+  const portraits = agents.slice(0, 5);
+  const extra = agents.slice(portraits.length);
   return <article className="strategy-card" draggable={!!dragId}
     onDragStart={event => { if (dragId) event.dataTransfer.setData('application/x-playbook-strategy', dragId); }}>
     <button type="button" className="strategy-open" onClick={onOpen} disabled={disabled}>
       <span className="strategy-artwork">
         {mapById[map] && <img alt="" src={mapThumb(map)} />}
         <span className="map-chip"><MapPin size={13} />{mapName(map)}</span>
+        {!!portraits.length && <span className="strategy-roster" role="img"
+          aria-label={`${t('友方阵容')} · ${agents.map(agent => agent.name).join(' / ')}`}>
+          {portraits.map(agent => <img key={agent.id} alt="" title={agent.name} src={gameAsset(agent.icon)} loading="lazy" draggable={false} />)}
+          {!!extra.length && <span title={extra.map(agent => agent.name).join(' / ')}>+{extra.length}</span>}
+        </span>}
       </span>
       <span className="strategy-info">
         <span><strong>{pinned && '★ '}{name}</strong><small>{opening ? t('正在打开…') : detail}</small></span>

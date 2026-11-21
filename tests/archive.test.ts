@@ -107,14 +107,33 @@ test('indexes nested names and updates revisions from the actual strategy file',
     const file = join(directory, 'A 夹击.ica');
     await mkdir(directory);
     const draft = newStrategy('ascent', 'A 夹击');
+    const [page] = draft.document.pages;
+    page.agentData = [
+      { id: 'ally', type: 'sova', position },
+      { id: 'enemy', type: 'raze', isAlly: false, position },
+      { id: 'deleted', type: 'sage', isDeleted: true, position },
+      { id: 'unknown', type: 'unknown-agent', position },
+    ];
+    page.abilityData = [
+      { id: 'ally-skill', data: { type: 'omen', index: 2 }, position },
+      { id: 'enemy-skill', data: { type: 'jett', index: 0 }, isAlly: false, position },
+    ];
+    draft.document.pages[0] = appendLineup(page,
+      { id: 'lineup', originId: 'origin', landingId: 'landing', name: '', notes: '', youtubeLink: '', images: [] },
+      { id: 'origin', type: 'viper', position }, { id: 'landing', data: { type: 'viper', index: 0 }, position });
     await writeFile(file, writeIca(draft));
     const [first] = await buildStrategyIndex(root);
     assert.deepEqual(first.path, ['进攻 #1', 'A 夹击.ica']);
     assert.equal(first.map, 'ascent');
-    draft.document.pages.push(newPage(1));
+    assert.deepEqual(first.roster, ['sova', 'omen', 'viper']);
+    draft.document.pages.push({ ...newPage(1), agentData: [
+      { id: 'repeat', type: 'sova', position },
+      { id: 'new', type: 'breach', position },
+    ] });
     await writeFile(file, writeIca(draft));
     const [second] = await buildStrategyIndex(root);
     assert.notEqual(second.revision, first.revision);
+    assert.deepEqual(second.roster, ['sova', 'omen', 'viper', 'breach']);
     await rm(file);
     assert.deepEqual(await buildStrategyIndex(root), []);
     await writeFile(file, 'invalid .ica');
