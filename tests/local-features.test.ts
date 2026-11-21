@@ -7,7 +7,8 @@ import { mapArtworkFrame, mapById, point, project } from '../src/catalog.ts';
 import { copyCanvasObjects, encodeCanvasClipboard, pasteCanvasObjects, readCanvasClipboard } from '../src/canvas-clipboard.ts';
 import { elevationsAt, prepareHeightModel, resolvedElevation, wallsAtElevation } from '../src/height-vision.ts';
 import { distance } from '../src/board-gestures.ts';
-import { nearestSightWall } from '../src/map-vision.ts';
+import { doorLine, mapDoors } from '../src/map-doors.ts';
+import { nearestSightWall, sightDoorWalls } from '../src/map-vision.ts';
 import { navigationFloorsAt, prepareNavigation, routeAcrossMap, routeOffsets, type NavSource, type RoutePoint } from '../src/navigation.ts';
 import { decodeReplay, replayAgent, replayCastName, replayDoorsAt, replayPosition, replaySpikeAt, replayUtilityAt } from '../src/replay.ts';
 import { formattedLines, textLinks } from '../src/text-content.ts';
@@ -94,7 +95,7 @@ test('snapping chooses the nearest point within the current screen reach', () =>
 });
 
 test('released navigation assets produce matching routes across map sides', () => {
-  const input = JSON.parse(readFileSync(new URL('../public/game/navigation/ascent.json', import.meta.url), 'utf8')) as NavSource;
+  const input = JSON.parse(readFileSync(new URL('../src/navigation-data/ascent.json', import.meta.url), 'utf8')) as NavSource;
   const nodes = prepareNavigation(input);
   const [firstLink] = input.links;
   const from = nodes[firstLink[0]]!.center;
@@ -106,7 +107,7 @@ test('released navigation assets produce matching routes across map sides', () =
 });
 
 test('Abyss routes between B Main and Mid Bend through the ascender', () => {
-  const input = JSON.parse(readFileSync(new URL('../public/game/navigation/abyss.json', import.meta.url), 'utf8')) as NavSource;
+  const input = JSON.parse(readFileSync(new URL('../src/navigation-data/abyss.json', import.meta.url), 'utf8')) as NavSource;
   const { x, y, scale } = mapArtworkFrame(mapById.abyss, true);
   const at = (dx: number, dy: number) => point(x + dx * scale, y + dy * scale);
   const bMain = at(103, 295), midBend = at(161, 282);
@@ -116,7 +117,7 @@ test('Abyss routes between B Main and Mid Bend through the ascender', () => {
   };
   const nodes = prepareNavigation(input);
   const route = routeAcrossMap(nodes, bMain, midBend, true, []);
-  const walking = prepareNavigation({ ...input, traversals: undefined });
+  const walking = prepareNavigation({ ...input, traversals: input.traversals?.filter(edge => edge.from[0] !== 512) });
   const detour = length(routeAcrossMap(walking, bMain, midBend, true, []));
   assert.ok(length(route) < detour / 4);
   assert.ok(length(routeAcrossMap(nodes, midBend, bMain, true, [])) < detour / 4);
@@ -124,12 +125,88 @@ test('Abyss routes between B Main and Mid Bend through the ascender', () => {
     route?.map(p => project(p, false)));
   const top = at(143.65, 278), bottom = at(143.65, 301);
   assert.equal(length(routeAcrossMap(nodes, bMain, midBend, true, [[top.dx, top.dy, bottom.dx, bottom.dy]])), detour);
+
+  const start = at(101.9, 298.9), end = at(183.3, 261.9);
+  const floor = { start: 400, end: 800 };
+  const longRoute = length(routeAcrossMap(walking, start, end, true, [], floor));
+  assert.ok(length(routeAcrossMap(nodes, start, end, true, [], floor)) < longRoute / 4);
+  assert.ok(length(routeAcrossMap(nodes, end, start, true, [], { start: floor.end, end: floor.start })) < longRoute / 4);
 });
 
-const traversalsByMap = { ascent: 1, bind: 2, breeze: 1, fracture: 3, haven: 1, icebox: 1, lotus: 1, split: 2, summit: 2 };
+test('Abyss cloud tactics route across the A Tower ascender and walk straight in front of A Main', () => {
+  const input = JSON.parse(readFileSync(new URL('../src/navigation-data/abyss.json', import.meta.url), 'utf8')) as NavSource;
+  const nodes = prepareNavigation(input);
+  const { x, y, scale } = mapArtworkFrame(mapById.abyss, true);
+  const at = (dx: number, dy: number) => point(x + dx * scale, y + dy * scale);
+  const omen = [at(378.85, 285.68), at(372.81, 286.11)] as const;
+  assert.deepEqual(routeAcrossMap(nodes, ...omen, true, []), omen);
+
+  const tower = at(352.46, 234.07), site = at(370.57, 236.04);
+  const floors = { start: 1200, end: 800 };
+  const entry = point(1169.2, 499.4), exit = point(1179.4, 499.4);
+  assert.deepEqual(routeAcrossMap(nodes, tower, site, true, [], floors), [tower, entry, exit, site]);
+  assert.deepEqual(routeAcrossMap(nodes, project(site, false), project(tower, false), false, [],
+    { start: floors.end, end: floors.start }), [site, exit, entry, tower].map(p => project(p, false)));
+});
+
+test('straightening a shared navigation edge does not cut across a closed door', () => {
+  const nodes = prepareNavigation({
+    points: [[0, 0], [10, 0], [10, 10], [0, 10], [20, 0], [20, 10]],
+    polygons: [[0, 1, 2, 3], [1, 4, 5, 2]],
+    links: [[0, 1, 10, 5], [1, 0, 10, 5]],
+  });
+  const start = point(2, 2), end = point(18, 2);
+  assert.deepEqual(routeAcrossMap(nodes, start, end, true, []), [start, end]);
+  assert.deepEqual(routeAcrossMap(nodes, start, end, true, [[10, 1, 10, 3]]), [start, point(10, 5), end]);
+});
+
+test('open ground stays straight even when polygon centers favor another corridor', () => {
+  for (const [id, from, to] of [['ascent', 157, 299], ['summit', 862, 945]] as const) {
+    const input = JSON.parse(readFileSync(new URL(`../src/navigation-data/${id}.json`, import.meta.url), 'utf8')) as NavSource;
+    const nodes = prepareNavigation(input);
+    const start = nodes[from]!, end = nodes[to]!;
+    for (const attack of [true, false]) {
+      const a = project(start.center, attack), b = project(end.center, attack);
+      assert.deepEqual(routeAcrossMap(nodes, a, b, attack, [], { start: start.floor!, end: end.floor! }), [a, b]);
+    }
+  }
+});
+
+test('markers near the Abyss map boundary attach to the closest polygon edge', () => {
+  const input = JSON.parse(readFileSync(new URL('../src/navigation-data/abyss.json', import.meta.url), 'utf8')) as NavSource;
+  const nodes = prepareNavigation(input);
+  const { x, y, scale } = mapArtworkFrame(mapById.abyss, true);
+  const start = point(x + 440.54 * scale, y + 194.65 * scale);
+  const end = point(x + 450.47 * scale, y + 190.77 * scale);
+  const route = routeAcrossMap(nodes, start, end, true, [], { start: 800, end: 778 });
+  assert.ok(route);
+  assert.equal(route.at(-1), end);
+  assert.ok(route.slice(1).reduce((total, step, index) => total + distance(route[index], step), 0) < distance(start, end) * 1.1);
+});
+
+test('closed map doors also block walking inside a single navmesh polygon', () => {
+  const examples = [['ascent', 'ascent-a', true], ['lotus', 'lotus-a-link', false], ['summit', 'summit-a', true]] as const;
+  for (const [id, doorId, closedWhenChanged] of examples) {
+    const map = mapById[id];
+    const door = mapDoors(map).find(row => row.id === doorId)!;
+    const input = JSON.parse(readFileSync(new URL(`../src/navigation-data/${id}.json`, import.meta.url), 'utf8')) as NavSource;
+    const nodes = prepareNavigation(input);
+    const [a, b] = doorLine(door, map, true, closedWhenChanged);
+    const dx = b.dx - a.dx, dy = b.dy - a.dy, span = Math.hypot(dx, dy);
+    const x = (a.dx + b.dx) / 2, y = (a.dy + b.dy) / 2;
+    const start = point(x - dy * 2 / span, y + dx * 2 / span);
+    const end = point(x + dy * 2 / span, y - dx * 2 / span);
+    const closed = sightDoorWalls(map, true, new Set(closedWhenChanged ? [doorId] : []));
+    const open = sightDoorWalls(map, true, new Set(closedWhenChanged ? [] : [doorId]));
+    assert.equal(routeAcrossMap(nodes, start, end, true, closed), undefined, doorId);
+    assert.deepEqual(routeAcrossMap(nodes, start, end, true, open), [start, end], doorId);
+  }
+});
+
+const traversalsByMap = { abyss: 3, ascent: 1, bind: 2, breeze: 1, fracture: 3, haven: 1, icebox: 1, lotus: 1, split: 3, summit: 2 };
 for (const [id, count] of Object.entries(traversalsByMap)) {
   test(`${id} follows the map's cross-floor and special movement links in the supported directions`, () => {
-    const input = JSON.parse(readFileSync(new URL(`../public/game/navigation/${id}.json`, import.meta.url), 'utf8')) as NavSource;
+    const input = JSON.parse(readFileSync(new URL(`../src/navigation-data/${id}.json`, import.meta.url), 'utf8')) as NavSource;
     const nodes = prepareNavigation(input);
     assert.equal(input.traversals?.length, count);
     for (const { from, to, bidirectional, teleport } of input.traversals!) {
@@ -153,7 +230,7 @@ for (const [id, count] of Object.entries(traversalsByMap)) {
 }
 
 test('Ascent sends a marker from the selected upper floor through the Heaven drop', () => {
-  const input = JSON.parse(readFileSync(new URL('../public/game/navigation/ascent.json', import.meta.url), 'utf8')) as NavSource;
+  const input = JSON.parse(readFileSync(new URL('../src/navigation-data/ascent.json', import.meta.url), 'utf8')) as NavSource;
   const nodes = prepareNavigation(input);
   const start = point(1225.7, 255.3), end = point(1225.7, 272.1);
   for (const attack of [true, false]) {

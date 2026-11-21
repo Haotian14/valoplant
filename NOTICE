@@ -9,7 +9,7 @@ replay actor names were adapted from
 lib/const/map_doors.dart in the same release.
 The replay map registration, agent identifiers and ability catalog under
 src/replay-*.json were adapted from the Icarus 5.2.1 replay tables.
-The planar navigation data under public/game/navigation was generated from
+The planar navigation data under src/navigation-data was generated from
 the same release's map meshes and portal links.
 QuickTime Animation layout in src/quicktime-animation.ts follows the same
 release's QuickTime encoder and container writer.

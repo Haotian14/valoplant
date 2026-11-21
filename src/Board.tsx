@@ -12,7 +12,7 @@ import { changedMapDoors, findMapDoor, mapDoors, type MapDoor } from './map-door
 import { loadSightWalls, nearestSightWall, sightDoorWalls, type SightSegment } from './map-vision.ts';
 import { elevationsAt, loadHeightModel, resolvedElevation, type HeightModel } from './height-vision.ts';
 import { themedMap, type MapPalette } from './preferences.ts';
-import { loadNavigation, navigationFloorsAt, routeAcrossMap, type Navigation, type RoutePoint } from './navigation.ts';
+import { crossesDoor, loadNavigation, navigationFloorsAt, routeAcrossMap, type Navigation, type RoutePoint } from './navigation.ts';
 import {
   bounds, drawingCollections, moveItem, newId, positionOf,
   type AbilityMarker, type AgentMarker, type CanvasItem, type CanvasSelection, type Drawing, type LineupLink, type Page,
@@ -135,7 +135,7 @@ export default function Board(props: Props) {
   const agentRoutes = useMemo(() => {
     const routes = new Map<string, RoutePoint[]>();
     const prior = props.transitionFrom;
-    if (!navigation || !prior || pageIsAttack(prior) !== attack) return routes;
+    if (!prior || pageIsAttack(prior) !== attack) return routes;
     const model = heightVision?.model;
     const floorAt = (position: Point, marker: AgentMarker) => {
       if (!model) return;
@@ -149,9 +149,11 @@ export default function Board(props: Props) {
       const start = worldMarker(before, 'agentData', map, prior, version);
       const end = worldMarker(next, 'agentData', map, page, version);
       if (distance(start, end) < 3 && before.visionElevation === next.visionElevation) continue;
-      const route = routeAcrossMap(navigation, start, end, attack, doorWalls,
+      const route = navigation && routeAcrossMap(navigation, start, end, attack, doorWalls,
         { start: floorAt(start, before), end: floorAt(end, next) });
       if (route) routes.set(next.id, route);
+      // An empty route disables straight-line animation when the door blocks it.
+      else if (crossesDoor(start, end, doorWalls)) routes.set(next.id, []);
     }
     return routes;
   }, [navigation, props.transitionFrom, page.agentData, attack, map, doorWalls, heightVision, version]);
