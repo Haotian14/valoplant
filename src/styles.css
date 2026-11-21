@@ -157,7 +157,7 @@ img { display: block; max-width: 100%; }
 .strategy-viewer .editor-header strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .viewer-pages { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 8px; border-top: 1px solid var(--border); }
 .viewer-pages .icon-button { width: 44px; height: 44px; }
-.viewer-pages select { max-width: min(60vw, 300px); min-height: 36px; color: var(--text); background: #211d2b; border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px; }
+.viewer-pages select { min-width: 0; max-width: 300px; min-height: 36px; color: var(--text); background: #211d2b; border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px; }
 .viewer-lineup-images img { display: block; max-width: 100%; max-height: 360px; margin: 8px auto; object-fit: contain; }
 .editor-header {
   display: flex; align-items: center; background: #15141c; padding: 0 8px;

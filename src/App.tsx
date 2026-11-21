@@ -2,10 +2,10 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ArrowDownToLine, ArrowUpRight, BookOpen, ChevronDown, CircleHelp, FolderOpen,
   LayoutGrid, List, Map as MapIcon, MapPin, MoreHorizontal, Plus, RefreshCw, Search, Trash2, Upload, Users, X, Play, Eye,
 } from 'lucide-react';
-import Editor from './Editor.tsx';
+import Editor, { type Saving } from './Editor.tsx';
 import { downloadIca, importIca } from './archive.ts';
 import { agentById, gameAsset, mapById, maps, mapThumb } from './catalog.ts';
-import { deleteDraft, loadDrafts, loadFolders, saveDraft, updateLibrary } from './storage.ts';
+import { deleteDraft, loadDrafts, loadFolders, loadTeamDraft, saveDraft, saveTeamDraft, updateLibrary } from './storage.ts';
 import { defaultFolderColor, downloadLibrary, folderChain, folderIcons, readLibraryBackup, type LibraryFolder } from './library-backup.ts';
 import { alliedRoster, newId, newStrategy, reindexPages, type Page, type Strategy } from './strategy.ts';
 import { flipPage, pageIsAttack } from './geometry.ts';
@@ -17,7 +17,8 @@ import { languageTag, t, useLanguage } from './locale.ts';
 
 type Entry = { path: string[]; name: string; map: string; revision: string; roster?: string[] };
 type MapFilter = string;
-type Saving = 'saved' | 'saving' | 'failed';
+type TeamStrategy = { scope: 'team'; strategy: Strategy; storageAvailable: boolean };
+type EditingStrategy = { scope: 'local'; strategy: Strategy } | TeamStrategy;
 const catalogUrl = `${import.meta.env.BASE_URL}strategies/`;
 const mapName = (id: string) => mapById[id]?.name ?? id;
 const date = (timestamp: number) => new Intl.DateTimeFormat(languageTag(), { month: 'short', day: 'numeric' }).format(timestamp);
@@ -37,12 +38,13 @@ export default function App() {
   const [showReplays, setShowReplays] = useState(false);
   const [saving, setSaving] = useState<Record<string, Saving>>({});
   const [draftLoadError, setDraftLoadError] = useState(false);
-  const [active, setActive] = useState<Strategy>();
-  const [viewing, setViewing] = useState<Strategy>();
+  const [active, setActive] = useState<EditingStrategy>();
+  const [viewing, setViewing] = useState<TeamStrategy>();
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [catalogError, setCatalogError] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [opening, setOpening] = useState('');
+  const teamRequest = useRef<AbortController>(null);
   const [tab, setTab] = useState<'team' | 'drafts'>('team');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<MapFilter>('');
@@ -91,13 +93,16 @@ export default function App() {
     return () => controller.abort();
   }, [refresh]);
 
-  const store = useCallback((strategy: Strategy) => {
-    setDrafts(rows => rows.some(row => row.id === strategy.id)
-      ? rows.map(row => row.id === strategy.id ? strategy : row) : [...rows, strategy]);
+  const store = useCallback((strategy: Strategy, scope: EditingStrategy['scope'] = 'local') => {
+    if (scope === 'local') {
+      setDrafts(rows => rows.some(row => row.id === strategy.id)
+        ? rows.map(row => row.id === strategy.id ? strategy : row) : [...rows, strategy]);
+    }
     setSaving(current => ({ ...current, [strategy.id]: 'saving' }));
     const attempt = (lastWrites.current.get(strategy.id) ?? 0) + 1;
     lastWrites.current.set(strategy.id, attempt);
-    saveDraft(strategy).then(() => {
+    const write = scope === 'team' ? saveTeamDraft(strategy) : saveDraft(strategy);
+    write.then(() => {
       if (lastWrites.current.get(strategy.id) !== attempt) return;
       setSaving(current => ({ ...current, [strategy.id]: 'saved' }));
     }).catch(() => {
@@ -106,10 +111,19 @@ export default function App() {
       notify('浏览器保存失败，请导出 .ica 保留当前战术');
     });
   }, [notify]);
+  const storeTeam = useCallback((strategy: Strategy) => store(strategy, 'team'), [store]);
+  const notifyStorageError = useCallback(() => {
+    notify(t('无法打开浏览器存储。可以继续编辑并通过导出保留战术。'));
+  }, [notify]);
+
+  function openDraft(strategy: Strategy) {
+    setActive({ scope: 'local', strategy });
+    setSwitchDraft(false);
+  }
 
   function startDraft(strategy: Strategy) {
     store(strategy);
-    setActive(strategy);
+    openDraft(strategy);
   }
 
   function captureReplay(map: string, name: string, page: Page, draftId?: string) {
@@ -125,21 +139,51 @@ export default function App() {
     notify(draft ? '画面已追加到战术最后一页' : '已保存为本地战术');
   }
 
-  async function openTeam(entry: Entry) {
-    if (opening) return;
-    setOpening(entryKey(entry));
+  function cancelTeamOpen() {
+    teamRequest.current?.abort();
+    teamRequest.current = null;
+    setOpening('');
+  }
+
+  function editTeam(team: TeamStrategy) {
+    setViewing(undefined);
+    setActive(team);
+    setSwitchDraft(false);
+    if (!team.storageAvailable) notifyStorageError();
+  }
+
+  async function openTeam(entry: Entry, preview = false) {
+    if (teamRequest.current) return;
+    const controller = new AbortController();
+    teamRequest.current = controller;
+    const id = entryKey(entry);
+    setOpening(id);
     try {
       if (!mapById[entry.map]) throw new Error(`暂不支持地图 ${entry.map}`);
-      const path = ['files', entry.revision, ...entry.path].map(encodeURIComponent).join('/');
-      const response = await fetch(catalogUrl + path, { signal: AbortSignal.timeout(30_000) });
-      if (!response.ok) throw new Error('战术文件读取失败，刷新团队列表后重试');
-      const strategy = importIca(new Uint8Array(await response.arrayBuffer()), entry.path.at(-1)!);
+      let storageAvailable = true;
+      const saved = await loadTeamDraft(id).catch(() => { storageAvailable = false; });
+      if (controller.signal.aborted) return;
+      let strategy = saved;
+      if (!strategy) {
+        const path = ['files', entry.revision, ...entry.path].map(encodeURIComponent).join('/');
+        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]);
+        const response = await fetch(catalogUrl + path, { signal });
+        if (!response.ok) throw new Error('战术文件读取失败，刷新团队列表后重试');
+        strategy = { ...importIca(new Uint8Array(await response.arrayBuffer()), entry.path.at(-1)!), id };
+      }
+      if (controller.signal.aborted) return;
       if (!mapById[strategy.document.mapData]) throw new Error(`暂不支持地图 ${strategy.document.mapData}`);
-      setViewing(strategy);
+      const team: TeamStrategy = { scope: 'team', strategy, storageAvailable };
+      setSaving(current => ({ ...current, [id]: saved ? 'saved' : storageAvailable ? 'published' : 'failed' }));
+      if (preview) setViewing(team);
+      else editTeam(team);
     } catch (error) {
-      notify(error instanceof Error ? error.message : '无法打开团队战术');
+      if (!controller.signal.aborted) notify(error instanceof Error ? error.message : '无法打开团队战术');
     } finally {
-      setOpening('');
+      if (teamRequest.current === controller) {
+        teamRequest.current = null;
+        setOpening('');
+      }
     }
   }
 
@@ -151,6 +195,7 @@ export default function App() {
 
   async function importFiles(files: File[]) {
     if (!files.length) return;
+    cancelTeamOpen();
     try {
       const records: Strategy[] = [];
       const folders: LibraryFolder[] = [];
@@ -249,6 +294,7 @@ export default function App() {
   }
 
   function changeTab(value: typeof tab) {
+    cancelTeamOpen();
     setTab(value); setFolder(''); setFilter(''); setSelectedMenu('');
   }
 
@@ -270,20 +316,22 @@ export default function App() {
   const visibleFolders = localFolders.filter(row => normalized ? row.name.toLocaleLowerCase().includes(normalized) : row.parentId === localFolder)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (reverseSort ? -1 : 1) * a.name.localeCompare(b.name));
   const hasItems = tab === 'team' ? teamItems.length > 0 : draftItems.length > 0 || visibleFolders.length > 0;
-  const startCreate = () => { setCreateMap(''); setShowOldMaps(false); setCreate(true); };
+  const startCreate = () => { cancelTeamOpen(); setCreateMap(''); setShowOldMaps(false); setCreate(true); };
+  const switchItems = !switchDraft ? [] : active?.scope === 'team'
+    ? (entries ?? []).filter(entry => entryKey(entry) !== active.strategy.id && mapById[entry.map])
+      .map(entry => ({ id: entryKey(entry), name: entry.name, map: entry.map, open: () => openTeam(entry) }))
+    : drafts.filter(row => row.id !== active?.strategy.id && mapById[row.document.mapData])
+      .map(row => ({ id: row.id, name: row.name, map: row.document.mapData, open: () => openDraft(row) }));
 
   return <>
     {showReplays ? <Suspense fallback={<p className="loading">{t('正在打开回放库…')}</p>}>
       <ReplayLibrary close={() => setShowReplays(false)} drafts={drafts} capture={captureReplay} />
-    </Suspense> : viewing ? <StrategyViewer key={viewing.id} strategy={viewing} close={() => setViewing(undefined)} saveLocalCopy={() => {
-      const now = Date.now();
-      changeTab('drafts');
-      setLocalFolder(undefined);
-      setQuery('');
-      setViewing(undefined);
-      startDraft({ ...viewing, updated: now, createdAt: now });
-    }} /> : active ? <Editor key={active.id} initial={active} save={store} exit={() => setActive(undefined)} onSwitch={() => setSwitchDraft(true)}
-      notify={notify} saving={saving[active.id] ?? 'saved'} />
+    </Suspense> : viewing ? <StrategyViewer key={viewing.strategy.id} strategy={viewing.strategy}
+      close={() => setViewing(undefined)} edit={() => editTeam(viewing)} />
+      : active ? <Editor key={active.strategy.id} initial={active.strategy}
+        save={active.scope === 'team' ? (active.storageAvailable ? storeTeam : notifyStorageError) : store}
+        exit={() => setActive(undefined)} onSwitch={() => setSwitchDraft(true)}
+        notify={notify} saving={saving[active.strategy.id] ?? 'saved'} />
       : <main className="library"
         onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }}
         onDrop={event => {
@@ -298,7 +346,7 @@ export default function App() {
             <nav aria-label={t('战术库')}>
               <button type="button" className={tab === 'team' ? 'nav-active' : ''} onClick={() => changeTab('team')}><Users size={16} />{t('团队战术库')}</button>
               <button type="button" className={tab === 'drafts' ? 'nav-active' : ''} onClick={() => changeTab('drafts')}><FolderOpen size={17} />{t('本地战术')}</button>
-              <button type="button" onClick={() => setShowReplays(true)}><Play size={16} />{t('回放')}</button>
+              <button type="button" onClick={() => { cancelTeamOpen(); setShowReplays(true); }}><Play size={16} />{t('回放')}</button>
             </nav>
             <div className="header-actions">
               <LanguageSelect inline />
@@ -368,7 +416,7 @@ export default function App() {
           {hasItems && <div className={`strategy-list strategy-${layout}`}>
             {tab === 'team' ? teamItems.map(entry => <StrategyCard key={entryKey(entry)}
               name={entry.name} map={entry.map} roster={entry.roster} detail={entry.path.slice(0, -1).join(' / ') || t('团队战术')}
-              disabled={!!opening} opening={opening === entryKey(entry)} onOpen={() => openTeam(entry)} />)
+              disabled={!!opening} opening={opening === entryKey(entry)} onOpen={() => openTeam(entry)} onPreview={() => openTeam(entry, true)} />)
               : <>
                 {visibleFolders.map(folder => <article className="strategy-card library-folder" key={folder.id} draggable
                   onDragStart={event => event.dataTransfer.setData('application/x-playbook-folder', folder.id)}
@@ -383,7 +431,7 @@ export default function App() {
                 name={strategy.name} map={strategy.document.mapData} roster={alliedRoster(strategy.document.pages)}
                 detail={`${strategy.document.pages.length} 页 · ${date(strategy.updated)}`}
                 pinned={strategy.pinned} dragId={strategy.id}
-                onOpen={() => mapById[strategy.document.mapData] ? setActive(strategy) : notify('这张地图暂未收录')}
+                onOpen={() => mapById[strategy.document.mapData] ? openDraft(strategy) : notify('这张地图暂未收录')}
                 menu={selectedMenu === strategy.id}
                 onMenu={() => setSelectedMenu(value => value === strategy.id ? '' : strategy.id)}
                 onExport={() => downloadDraft(strategy)}
@@ -432,7 +480,7 @@ export default function App() {
             <li>{t('把 .ica 放进 GitHub 仓库的')}{' '} <code>strategies/</code> {' '}{t('并提交。')}</li>
             <li>{t('GitHub Pages 部署完成后，刷新团队战术库。')}</li>
           </ol>
-          <p className="muted">{t('团队战术可直接查看。需要修改时，点击「另存到本地并编辑」。')}</p>
+          <p className="muted">{t('团队战术的修改按发布版本单独保存在此浏览器。向队友分享修改时，请导出 .ica。')}</p>
         </Modal>}
       </main>}
     {editFolder && <Modal title={localFolders.some(row => row.id === editFolder.id) ? t('编辑文件夹') : t('新建文件夹')}
@@ -486,22 +534,22 @@ export default function App() {
         <div className="modal-actions"><button className="button primary" type="submit">{t('移动')}</button></div>
       </form>
     </Modal>}
-    {switchDraft && <Modal title={t('打开另一份战术')} onClose={() => setSwitchDraft(false)}>
-      <div className="draft-switcher">{drafts.filter(row => row.id !== active?.id && mapById[row.document.mapData]).map(row =>
-        <button className="button secondary" type="button" key={row.id} onClick={() => { setActive(row); setSwitchDraft(false); }}>
-          {row.name} · {mapName(row.document.mapData)}
+    {switchDraft && <Modal title={t('打开另一份战术')} onClose={() => { cancelTeamOpen(); setSwitchDraft(false); }}>
+      <div className="draft-switcher">{switchItems.map(item =>
+        <button className="button secondary" type="button" key={item.id} disabled={!!opening} onClick={item.open}>
+          {opening === item.id ? t('正在打开…') : `${item.name} · ${mapName(item.map)}`}
         </button>)}
-        {drafts.length <= 1 && <p className="muted">{t('本地库中没有其他战术')}</p>}
+        {!switchItems.length && <p className="muted">{t(active?.scope === 'team' ? '团队库中没有其他战术' : '本地库中没有其他战术')}</p>}
       </div>
     </Modal>}
     {toast && <div className="toast" role="status">{toast}<IconButton label={t('关闭提示')} onClick={() => setToast('')}><X size={15} /></IconButton></div>}
   </>;
 }
 
-function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu, pinned, dragId, onMenu, onExport, onRename, onMove, onPin, onDuplicate, onRemove, onOpen }:
+function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu, pinned, dragId, onMenu, onExport, onRename, onMove, onPin, onDuplicate, onRemove, onOpen, onPreview }:
   { name: string; map: string; detail: string; roster?: string[]; disabled?: boolean; opening?: boolean; menu?: boolean;
     pinned?: boolean; dragId?: string; onRename?: () => void; onMove?: () => void; onPin?: () => void;
-    onMenu?: () => void; onExport?: () => void; onDuplicate?: () => void; onRemove?: () => void; onOpen: () => void; }) {
+    onMenu?: () => void; onExport?: () => void; onDuplicate?: () => void; onRemove?: () => void; onOpen: () => void; onPreview?: () => void; }) {
   const agents = roster.filter(id => Object.hasOwn(agentById, id)).map(id => agentById[id]);
   const portraits = agents.slice(0, 5);
   const extra = agents.slice(portraits.length);
@@ -519,9 +567,11 @@ function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu,
       </span>
       <span className="strategy-info">
         <span><strong>{pinned && '★ '}{name}</strong><small>{opening ? t('正在打开…') : detail}</small></span>
-        {!onMenu && <Eye size={17} />}
       </span>
     </button>
+    {onPreview && <div className="strategy-more">
+      <IconButton label={`${t('只读浏览')} · ${name}`} disabled={disabled} onClick={onPreview}><Eye size={18} /></IconButton>
+    </div>}
     {onMenu && <div className="strategy-more">
       <IconButton label={`${name} 的操作`} aria-expanded={!!menu} onClick={onMenu}><MoreHorizontal size={19} /></IconButton>
       {menu && <div className="popover context-menu card-menu">

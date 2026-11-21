@@ -2,6 +2,7 @@ import type { Strategy } from './strategy.ts';
 import type { LibraryFolder } from './library-backup.ts';
 
 const storeName = 'strategies';
+const teamStore = 'team-strategies';
 const folderStore = 'folders';
 const replayStore = 'replays';
 type StoredStrategy = Strategy & { published?: { importedAt: number } };
@@ -9,10 +10,11 @@ export type SavedReplay = { id: string; name: string; blob: Blob; map: string };
 
 function openLibrary(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const open = indexedDB.open('valoplant-team-playbook', 3);
+    const open = indexedDB.open('valoplant-team-playbook', 4);
     let blocked = false;
     open.onupgradeneeded = () => {
       if (!open.result.objectStoreNames.contains(storeName)) open.result.createObjectStore(storeName, { keyPath: 'id' });
+      if (!open.result.objectStoreNames.contains(teamStore)) open.result.createObjectStore(teamStore, { keyPath: 'id' });
       if (!open.result.objectStoreNames.contains(folderStore)) open.result.createObjectStore(folderStore, { keyPath: 'id' });
       if (!open.result.objectStoreNames.contains(replayStore)) open.result.createObjectStore(replayStore, { keyPath: 'id' });
     };
@@ -55,6 +57,8 @@ export async function loadDrafts() {
 
 export const saveDraft = (strategy: Strategy) => transaction('readwrite', store => store.put(strategy));
 export const deleteDraft = (id: string) => transaction('readwrite', store => store.delete(id));
+export const loadTeamDraft = (id: string) => transaction<Strategy | undefined>('readonly', store => store.get(id), teamStore);
+export const saveTeamDraft = (strategy: Strategy) => transaction('readwrite', store => store.put(strategy), teamStore);
 export const loadFolders = () => transaction<LibraryFolder[]>('readonly', store => store.getAll(), folderStore);
 export const loadReplays = () => transaction<SavedReplay[]>('readonly', store => store.getAll(), replayStore);
 export const saveReplay = (replay: SavedReplay) => transaction('readwrite', store => store.put(replay), replayStore);

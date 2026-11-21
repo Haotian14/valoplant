@@ -26,9 +26,11 @@ import { IconButton, Modal } from './ui.tsx';
 import CanvasExportDialog from './CanvasExportDialog.tsx';
 import { parsePalette, readPreferences, writePreferences } from './preferences.ts';
 import { useMediaUrls } from './use-media-urls.ts';
+import { useStrategyPlayback } from './use-strategy-playback.ts';
 import { copyCanvasObjects, encodeCanvasClipboard, pasteCanvasObjects, readCanvasClipboard } from './canvas-clipboard.ts';
 
 type Update = (strategy: Strategy) => Strategy;
+export type Saving = 'published' | 'saved' | 'saving' | 'failed';
 const EditorSettings = lazy(() => import('./EditorSettings.tsx'));
 type History = { present: Strategy; past: Strategy[]; future: Strategy[] };
 type HistoryAction = { type: 'edit'; update: Update } | { type: 'undo' } | { type: 'redo' };
@@ -113,7 +115,7 @@ async function fileToImage(file: File) {
 
 export default function Editor({ initial, save, exit, notify, saving, onSwitch }: {
   initial: Strategy; save: (strategy: Strategy) => void; exit: () => void; notify: (message: string) => void;
-  saving: 'saved' | 'saving' | 'failed'; onSwitch?: () => void;
+  saving: Saving; onSwitch?: () => void;
 }) {
   const [history, dispatch] = useReducer(reducer, { present: initial, past: [], future: [] });
   const strategy = history.present;
@@ -166,9 +168,7 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
   const [pagesSize, setPagesSize] = useState<{ width: number; height: number }>();
   const lineupDialog = lineupForm?.link;
   const [inspect, setInspect] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [animate, setAnimate] = useState(false);
-  const [transitionFrom, setTransitionFrom] = useState<Page>();
+  const { playing, setPlaying, animate, transitionFrom, changePage, togglePlayback } = useStrategyPlayback(pages, pageIndex, selectPage);
   const [pageRename, setPageRename] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [favorite, setFavorite] = useState<string[]>(() => {
@@ -255,34 +255,16 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
     setInspect(false);
   }
 
-  function changePage(index: number) {
-    const target = Math.max(0, Math.min(pages.length - 1, index));
-    if (pages[target].id !== page.id) setTransitionFrom(page);
-    setPageNumber(target);
-    setActivePageId(pages[target].id);
+  function selectPage(index: number) {
+    setPageNumber(index);
+    setActivePageId(pages[index].id);
     setEditingTextId(undefined);
     setSelection([]);
     setContext(undefined);
     setClearMenu(false);
     setInspect(false);
     setLineupPlacement(undefined);
-    setAnimate(true);
   }
-
-  useEffect(() => {
-    if (!animate) return;
-    const timer = setTimeout(() => { setAnimate(false); setTransitionFrom(undefined); }, 440);
-    return () => clearTimeout(timer);
-  }, [animate, pageIndex]);
-
-  useEffect(() => {
-    if (!playing) return;
-    const timer = setTimeout(() => {
-      if (pageIndex + 1 < pages.length) changePage(pageIndex + 1);
-      else setPlaying(false);
-    }, 1400);
-    return () => clearTimeout(timer);
-  }, [playing, pageIndex, pages.length]);
 
   function addPage(mode: 'next' | 'copy' | 'blank') {
     const position = pageIndex + 1;
@@ -866,7 +848,8 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
             }} />
           <span className={`save-status ${saving === 'failed' ? 'error' : ''}`}>
             <i />{!preferences.autosave && lastSent.current !== strategy ? '尚未保存' :
-              saving === 'saved' ? '已保存到浏览器' : saving === 'saving' ? '正在保存' : t('保存失败')}
+              saving === 'published' ? t('团队发布版本') : saving === 'saved' ? '已保存到浏览器' :
+                saving === 'saving' ? '正在保存' : t('保存失败')}
           </span>
         </div>
       </div>
@@ -1083,10 +1066,8 @@ export default function Editor({ initial, save, exit, notify, saving, onSwitch }
               }}>↗</button>
             <div className="pages-actions">
               <div className="timeline-controls">
-                <IconButton label={playing ? '暂停播放' : '播放战术'} className={playing ? 'active' : ''} onClick={() => {
-                  if (!playing && pageIndex === pages.length - 1) changePage(0);
-                  setPlaying(value => !value);
-                }} disabled={pages.length < 2}>{playing ? <Pause size={16} /> : <Play size={16} />}</IconButton>
+                <IconButton label={t(playing ? '暂停播放' : '播放战术')} className={playing ? 'active' : ''}
+                  onClick={togglePlayback} disabled={pages.length < 2}>{playing ? <Pause size={16} /> : <Play size={16} />}</IconButton>
                 <IconButton label={t('上一页 (A)')} disabled={pageIndex === 0} onClick={() => changePage(pageIndex - 1)}><ChevronLeft size={16} /></IconButton>
                 <IconButton label={t('下一页 (D)')} disabled={pageIndex === pages.length - 1} onClick={() => changePage(pageIndex + 1)}><ChevronRight size={16} /></IconButton>
               </div>
