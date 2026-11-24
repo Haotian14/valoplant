@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
-import { ArrowDownToLine, ArrowUpRight, BookOpen, ChevronDown, CircleHelp, FolderOpen,
+import { ArrowDownToLine, ArrowUpRight, BookOpen, ChevronDown, ChevronRight, CircleHelp, FolderOpen,
   LayoutGrid, List, Map as MapIcon, MapPin, MoreHorizontal, Plus, RefreshCw, Search, Trash2, Upload, Users, X, Play, Eye,
 } from 'lucide-react';
 import Editor, { type Saving } from './Editor.tsx';
@@ -16,7 +16,6 @@ import LanguageSelect from './LanguageSelect.tsx';
 import { languageTag, t, useLanguage } from './locale.ts';
 
 type Entry = { path: string[]; name: string; map: string; revision: string; roster?: string[] };
-type MapFilter = string;
 type TeamStrategy = { scope: 'team'; strategy: Strategy; storageAvailable: boolean };
 type EditingStrategy = { scope: 'local'; strategy: Strategy } | TeamStrategy;
 const catalogUrl = `${import.meta.env.BASE_URL}strategies/`;
@@ -47,8 +46,8 @@ export default function App() {
   const teamRequest = useRef<AbortController>(null);
   const [tab, setTab] = useState<'team' | 'drafts'>('team');
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<MapFilter>('');
-  const [folder, setFolder] = useState('');
+  const [filter, setFilter] = useState('');
+  const [teamMap, setTeamMap] = useState('');
   const [layout, setLayout] = useState<'grid' | 'list'>('grid');
   const [sort, setSort] = useState<'recent' | 'created' | 'name' | 'map'>('recent');
   const [reverseSort, setReverseSort] = useState(false);
@@ -295,16 +294,23 @@ export default function App() {
 
   function changeTab(value: typeof tab) {
     cancelTeamOpen();
-    setTab(value); setFolder(''); setFilter(''); setSelectedMenu('');
+    setTab(value); setTeamMap(''); setFilter(''); setSelectedMenu('');
   }
 
-  const teamFolders = useMemo(() => [...new Set((entries ?? []).flatMap(entry => entry.path.slice(0, -1)
-    .map((_, index) => entry.path.slice(0, index + 1).join('/'))))].sort(), [entries]);
+  const teamFolders = useMemo(() => {
+    const byMap = new Map<string, Entry[]>();
+    for (const entry of entries ?? []) {
+      const group = byMap.get(entry.map);
+      if (group) group.push(entry);
+      else byMap.set(entry.map, [entry]);
+    }
+    return [...byMap].sort(([a], [b]) => mapName(a).localeCompare(mapName(b)));
+  }, [entries]);
   const normalized = query.trim().toLocaleLowerCase();
+  const showTeamFolders = !teamMap && !normalized;
   const teamItems = (entries ?? []).filter(entry =>
-    (!folder || publishedPath(entry).startsWith(folder + '/')) &&
-    (!filter || entry.map === filter) &&
-    `${publishedPath(entry)} ${mapName(entry.map)}`.toLocaleLowerCase().includes(normalized),
+    (!teamMap || entry.map === teamMap) &&
+    `${entry.name} ${publishedPath(entry)} ${mapName(entry.map)}`.toLocaleLowerCase().includes(normalized),
   ).sort((a, b) => (reverseSort ? -1 : 1) * (sort === 'map' ?
     mapName(a.map).localeCompare(mapName(b.map)) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name)));
   const draftItems = drafts.filter(row => (normalized || row.folderId === localFolder) && (!filter || row.document.mapData === filter) &&
@@ -315,7 +321,9 @@ export default function App() {
     sort === 'map' ? mapName(a.document.mapData).localeCompare(mapName(b.document.mapData)) || a.name.localeCompare(b.name) : b.updated - a.updated));
   const visibleFolders = localFolders.filter(row => normalized ? row.name.toLocaleLowerCase().includes(normalized) : row.parentId === localFolder)
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || (reverseSort ? -1 : 1) * a.name.localeCompare(b.name));
-  const hasItems = tab === 'team' ? teamItems.length > 0 : draftItems.length > 0 || visibleFolders.length > 0;
+  const hasItems = tab === 'team' ? (showTeamFolders ? teamFolders.length : teamItems.length) > 0
+    : draftItems.length > 0 || visibleFolders.length > 0;
+  const hasFilters = !!(normalized || (tab === 'team' ? teamMap : filter));
   const startCreate = () => { cancelTeamOpen(); setCreateMap(''); setShowOldMaps(false); setCreate(true); };
   const switchItems = !switchDraft ? [] : active?.scope === 'team'
     ? (entries ?? []).filter(entry => entryKey(entry) !== active.strategy.id && mapById[entry.map])
@@ -375,16 +383,13 @@ export default function App() {
               <input type="search" placeholder={t('搜索战术或地图')} aria-label={t('搜索战术')} value={query} onChange={event => setQuery(event.target.value)} />
             </div>
             <label className="select-wrap"><MapPin size={15} />
-              <select aria-label={t('筛选地图')} value={filter} onChange={event => setFilter(event.target.value)}>
+              <select aria-label={t('筛选地图')} value={tab === 'team' ? teamMap : filter}
+                onChange={event => (tab === 'team' ? setTeamMap : setFilter)(event.target.value)}>
                 <option value="">{t('全部地图')}</option>
-                {maps.map(map => <option value={map.id} key={map.id}>{map.name}</option>)}
+                {(tab === 'team' ? teamFolders.map(([map]) => map) : maps.map(map => map.id))
+                  .map(map => <option value={map} key={map}>{mapName(map)}</option>)}
               </select><ChevronDown size={13} />
             </label>
-            {tab === 'team' && teamFolders.length > 0 && <label className="select-wrap"><FolderOpen size={15} />
-              <select aria-label={t('团队文件夹')} value={folder} onChange={event => setFolder(event.target.value)}>
-                <option value="">{t('所有文件夹')}</option>{teamFolders.map(value => <option key={value}>{value}</option>)}
-              </select><ChevronDown size={13} />
-            </label>}
             <div className="library-controls-end">
               <label className="select-wrap"><select aria-label={t('排序')} value={tab === 'team' && ['recent', 'created'].includes(sort) ? 'name' : sort}
                 onChange={event => setSort(event.target.value as typeof sort)}>
@@ -400,6 +405,11 @@ export default function App() {
               {tab === 'team' && <IconButton label={t('刷新团队战术')} onClick={() => setRefresh(value => value + 1)}><RefreshCw size={16} /></IconButton>}
             </div>
           </div>
+          {tab === 'team' && teamMap && <nav className="library-breadcrumb team-breadcrumb" aria-label={t('当前文件夹')}>
+            <button className="button subtle" type="button" onClick={() => { setTeamMap(''); setQuery(''); }}>{t('团队战术库')}</button>
+            <ChevronRight size={14} aria-hidden="true" />
+            <span aria-current="location">{mapName(teamMap)}</span>
+          </nav>}
           {tab === 'drafts' && localFolder && <nav className="library-breadcrumb" aria-label={t('当前文件夹')}>
             <button className="button subtle" type="button" onDragOver={allowLibraryDrop} onDrop={event => moveEntry(event)}
               onClick={() => { setLocalFolder(undefined); setQuery(''); }}>{t('本地战术')}</button>
@@ -414,9 +424,12 @@ export default function App() {
             <button type="button" className="button secondary" onClick={() => setRefresh(value => value + 1)}>{t('重试')}</button></p>}
           {tab === 'team' && entries === null && !catalogError && <p className="muted loading" role="status">{t('正在读取团队战术…')}</p>}
           {hasItems && <div className={`strategy-list strategy-${layout}`}>
-            {tab === 'team' ? teamItems.map(entry => <StrategyCard key={entryKey(entry)}
-              name={entry.name} map={entry.map} roster={entry.roster} detail={entry.path.slice(0, -1).join(' / ') || t('团队战术')}
-              disabled={!!opening} opening={opening === entryKey(entry)} onOpen={() => openTeam(entry)} onPreview={() => openTeam(entry, true)} />)
+            {tab === 'team' ? (showTeamFolders
+              ? (reverseSort ? teamFolders.toReversed() : teamFolders).map(([map, group]) => <TeamMapFolder key={map}
+                map={map} entries={group} onOpen={() => setTeamMap(map)} />)
+              : teamItems.map(entry => <StrategyCard key={entryKey(entry)}
+                name={entry.name} map={entry.map} roster={entry.roster} detail={entry.path.slice(0, -1).join(' / ') || t('团队战术')}
+                disabled={!!opening} opening={opening === entryKey(entry)} onOpen={() => openTeam(entry)} onPreview={() => openTeam(entry, true)} />))
               : <>
                 {visibleFolders.map(folder => <article className="strategy-card library-folder" key={folder.id} draggable
                   onDragStart={event => event.dataTransfer.setData('application/x-playbook-folder', folder.id)}
@@ -449,11 +462,11 @@ export default function App() {
           </div>}
           {!hasItems && (tab === 'drafts' || (entries !== null && !catalogError)) && <div className="empty-state">
             <div className="empty-icon">{tab === 'team' ? <Users size={28} /> : <MapIcon size={28} />}</div>
-            <h2>{query || filter || folder ? t('没有匹配的战术') : tab === 'team' ? t('还没有发布的战术') : t('开始你的第一场战术')}</h2>
-            <p>{query || filter || folder ? t('换个关键词，或清除筛选条件。') :
+            <h2>{hasFilters ? t('没有匹配的战术') : tab === 'team' ? t('还没有发布的战术') : t('开始你的第一场战术')}</h2>
+            <p>{hasFilters ? t('换个关键词，或清除筛选条件。') :
               tab === 'team' ? t('把导出的 .ica 放进仓库的 strategies/ 文件夹，部署后就会出现在这里。') : t('选一张地图，摆放英雄、规划路线并导出。')}</p>
-            {query || filter || folder
-              ? <button type="button" className="button secondary" onClick={() => { setQuery(''); setFilter(''); setFolder(''); }}>{t('清除筛选')}</button>
+            {hasFilters
+              ? <button type="button" className="button secondary" onClick={() => { setQuery(''); setFilter(''); setTeamMap(''); }}>{t('清除筛选')}</button>
               : <button type="button" className="button secondary" onClick={startCreate}><Plus size={17} />{t('新建战术')}</button>}
           </div>}
         </section>
@@ -546,24 +559,47 @@ export default function App() {
   </>;
 }
 
+function StrategyRoster({ roster }: { roster: string[] }) {
+  const agents = roster.filter(id => Object.hasOwn(agentById, id)).map(id => agentById[id]);
+  if (!agents.length) return null;
+  const portraits = agents.slice(0, 5);
+  const extra = agents.slice(portraits.length);
+  return <span className="strategy-roster" role="img" aria-label={`${t('友方阵容')} · ${agents.map(agent => agent.name).join(' / ')}`}>
+    {portraits.map(agent => <img key={agent.id} alt="" title={agent.name} src={gameAsset(agent.icon)} loading="lazy" draggable={false} />)}
+    {!!extra.length && <span title={extra.map(agent => agent.name).join(' / ')}>+{extra.length}</span>}
+  </span>;
+}
+
+function TeamMapFolder({ map, entries, onOpen }: { map: string; entries: Entry[]; onOpen: () => void }) {
+  const roster = [...new Set(entries.flatMap(entry => entry.roster ?? []))];
+  const count = entries.length;
+  return <article className="strategy-card">
+    <button className="strategy-open" type="button" onClick={onOpen}>
+      <span className="strategy-artwork">
+        {mapById[map] && <img alt="" src={mapThumb(map)} />}
+        <span className="map-chip"><FolderOpen size={14} aria-hidden="true" /></span>
+        <StrategyRoster roster={roster} />
+      </span>
+      <span className="strategy-info">
+        <span><strong>{mapName(map)}</strong>
+          <small>{count === 1 ? t('1 份战术') : t('{n} 份战术').replace('{n}', String(count))}</small></span>
+        <ChevronRight size={17} aria-hidden="true" />
+      </span>
+    </button>
+  </article>;
+}
+
 function StrategyCard({ name, map, detail, roster = [], disabled, opening, menu, pinned, dragId, onMenu, onExport, onRename, onMove, onPin, onDuplicate, onRemove, onOpen, onPreview }:
   { name: string; map: string; detail: string; roster?: string[]; disabled?: boolean; opening?: boolean; menu?: boolean;
     pinned?: boolean; dragId?: string; onRename?: () => void; onMove?: () => void; onPin?: () => void;
     onMenu?: () => void; onExport?: () => void; onDuplicate?: () => void; onRemove?: () => void; onOpen: () => void; onPreview?: () => void; }) {
-  const agents = roster.filter(id => Object.hasOwn(agentById, id)).map(id => agentById[id]);
-  const portraits = agents.slice(0, 5);
-  const extra = agents.slice(portraits.length);
   return <article className="strategy-card" draggable={!!dragId}
     onDragStart={event => { if (dragId) event.dataTransfer.setData('application/x-playbook-strategy', dragId); }}>
     <button type="button" className="strategy-open" onClick={onOpen} disabled={disabled}>
       <span className="strategy-artwork">
         {mapById[map] && <img alt="" src={mapThumb(map)} />}
         <span className="map-chip"><MapPin size={13} />{mapName(map)}</span>
-        {!!portraits.length && <span className="strategy-roster" role="img"
-          aria-label={`${t('友方阵容')} · ${agents.map(agent => agent.name).join(' / ')}`}>
-          {portraits.map(agent => <img key={agent.id} alt="" title={agent.name} src={gameAsset(agent.icon)} loading="lazy" draggable={false} />)}
-          {!!extra.length && <span title={extra.map(agent => agent.name).join(' / ')}>+{extra.length}</span>}
-        </span>}
+        <StrategyRoster roster={roster} />
       </span>
       <span className="strategy-info">
         <span><strong>{pinned && '★ '}{name}</strong><small>{opening ? t('正在打开…') : detail}</small></span>

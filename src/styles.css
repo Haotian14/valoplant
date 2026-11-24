@@ -134,12 +134,12 @@ img { display: block; max-width: 100%; }
 .strategy-info small { font-size: .77rem; }
 .strategy-card:has(.strategy-more) .strategy-info { padding-right: 44px; }
 .strategy-more { position: absolute; right: 6px; bottom: 10px; }
-.strategy-list:not(.strategy-grid) .strategy-open { grid-template-columns: 119px 1fr; }
+.strategy-list:not(.strategy-grid) .strategy-open { grid-template-columns: 128px 1fr; }
 .strategy-list:not(.strategy-grid) .strategy-artwork { height: 64px; border-radius: 12px 0 0 12px; }
 .strategy-list:not(.strategy-grid) .map-chip { bottom: 6px; left: 6px; }
 .strategy-list:not(.strategy-grid) .strategy-roster { top: 6px; right: 6px; gap: 1px; }
-.strategy-list:not(.strategy-grid) .strategy-roster img { width: 16px; height: 16px; border-radius: 3px; }
-.strategy-list:not(.strategy-grid) .strategy-roster span { padding-inline: 2px; font-size: .6rem; line-height: 14px; }
+.strategy-list:not(.strategy-grid) .strategy-roster img { width: 18px; height: 18px; border-radius: 3px; }
+.strategy-list:not(.strategy-grid) .strategy-roster span { padding-inline: 2px; font-size: .6rem; line-height: 16px; }
 .card-menu { top: 100%; right: 0; width: 168px; }
 .empty-state {
   display: flex; align-items: center; flex-direction: column; text-align: center; min-height: 290px; justify-content: center;
@@ -183,6 +183,8 @@ img { display: block; max-width: 100%; }
 .caption-content { white-space: pre-wrap; overflow-wrap: anywhere; }
 .folder-emblem { display: grid; place-items: center; min-height: 80px; font-size: 2rem; background: #271e35; }
 .library-breadcrumb { display: flex; flex-wrap: wrap; gap: 4px; margin-block: 8px; }
+.team-breadcrumb { align-items: center; margin: -8px 0 16px; color: var(--muted); font-size: .88rem; }
+.team-breadcrumb [aria-current] { padding-inline: 6px; color: var(--text); font-weight: 600; }
 .draft-switcher { display: grid; gap: 6px; }
 .export-fields { min-inline-size: 0; padding: 0; margin: 0; border: 0; }
 .export-page-controls { display: flex; align-items: center; gap: 5px; margin: 8px 0 4px; }
